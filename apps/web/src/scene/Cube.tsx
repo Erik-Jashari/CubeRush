@@ -5,7 +5,9 @@ import {
   FACE_NORMALS,
   layerToCoord,
   type Cubie,
+  type CubeState,
   type Face,
+  type Move,
   type Vec3,
 } from '@cuberush/cube-core';
 import { RoundedBox } from '@react-three/drei';
@@ -21,7 +23,7 @@ import {
   type Camera,
 } from 'three';
 import { dragToMove, faceNormalFromPoint, type ScreenVec } from '../game/drag';
-import { useGame } from '../game/store';
+import { canTurn, useGame } from '../game/store';
 import { STICKER_COLORS } from './colors';
 
 const CUBIE_SIZE = 0.95;
@@ -59,13 +61,31 @@ function roundedSquare(size: number, radius: number): ShapeGeometry {
 }
 
 const stickerGeometry = roundedSquare(STICKER_SIZE, 0.11);
-const stickerMaterials = Object.fromEntries(
-  Object.entries(STICKER_COLORS).map(([face, color]) => [
-    face,
-    new MeshStandardMaterial({ color, roughness: 0.35, metalness: 0 }),
-  ]),
-) as Record<Face, MeshStandardMaterial>;
-const bodyMaterial = new MeshStandardMaterial({ color: '#111216', roughness: 0.55 });
+
+/** How the cube is drawn: normally, with blank stickers (blindfold), or see-through (ghost). */
+export type CubeLook = 'normal' | 'hidden' | 'ghost';
+
+function materialsFor(look: CubeLook) {
+  const ghost = look === 'ghost' ? { transparent: true, opacity: 0.55, depthWrite: false } : {};
+  const sticker = (color: string) =>
+    new MeshStandardMaterial({ color, roughness: 0.35, metalness: 0, ...ghost });
+  const blank = sticker('#4a4f60');
+  return {
+    body: new MeshStandardMaterial({ color: '#111216', roughness: 0.55, ...ghost }),
+    stickers: Object.fromEntries(
+      Object.entries(STICKER_COLORS).map(([face, color]) => [
+        face,
+        look === 'hidden' ? blank : sticker(color),
+      ]),
+    ) as Record<Face, MeshStandardMaterial>,
+  };
+}
+
+const MATERIALS: Record<CubeLook, ReturnType<typeof materialsFor>> = {
+  normal: materialsFor('normal'),
+  hidden: materialsFor('hidden'),
+  ghost: materialsFor('ghost'),
+};
 
 const easeOutCubic = (t: number) => 1 - (1 - t) ** 3;
 
@@ -105,9 +125,25 @@ interface Controls {
   enabled: boolean;
 }
 
-export function Cube() {
-  const n = useGame((s) => s.displayed.n);
+/** Anything the cube view can play: the player's game or a ghost replay. */
+export interface AnimatedCube {
+  displayed: CubeState;
+  animQueue: Move[];
+  finishAnimation(): void;
+}
+
+interface CubeProps {
+  /** Reads the current state; called every frame. */
+  source: () => AnimatedCube;
+  /** Whether dragging turns layers (only the player's own cube). */
+  interactive?: boolean;
+  look?: CubeLook;
+}
+
+export function Cube({ source, interactive = false, look = 'normal' }: CubeProps) {
+  const n = useMemo(() => source().displayed.n, [source]);
   const pieces = useMemo(() => createSolvedCube(n).cubies, [n]);
+  const materials = MATERIALS[look];
   const groups = useRef<(Group | null)[]>([]);
   const progress = useRef(0);
   const getThree = useThree((s) => s.get);
@@ -117,14 +153,14 @@ export function Cube() {
   const rest = useMemo(() => new Matrix4(), []);
   const turning = useMemo(() => new Matrix4(), []);
   useFrame((_, delta) => {
-    let state = useGame.getState();
+    let state = source();
     if (state.animQueue.length > 0) {
       const ms = Math.max(MIN_TURN_MS, TURN_MS / state.animQueue.length);
       progress.current += (delta * 1000) / ms;
       if (progress.current >= 1) {
         progress.current = 0;
         state.finishAnimation();
-        state = useGame.getState();
+        state = source();
       }
     }
 
@@ -147,9 +183,8 @@ export function Cube() {
   });
 
   const onPointerDown = (e: ThreeEvent<PointerEvent>) => {
-    const game = useGame.getState();
-    if (game.screen !== 'play' || game.status === 'solved') return;
-    if (e.pointerType === 'mouse' && e.button !== 0) return; // other buttons still orbit
+    if (!interactive || !canTurn(useGame.getState())) return;
+    if (e.pointerType === 'mouse' && e.button !== 0) return; // right-drag orbits, even on the cube
     e.stopPropagation();
 
     const { camera, size, controls } = getThree();
@@ -197,7 +232,7 @@ export function Cube() {
             args={[CUBIE_SIZE, CUBIE_SIZE, CUBIE_SIZE]}
             radius={0.08}
             smoothness={3}
-            material={bodyMaterial}
+            material={materials.body}
           />
           {cubieColors(n, piece).map((face) => {
             const normal = new Vector3(...FACE_NORMALS[face]).multiplyScalar(STICKER_OFFSET);
@@ -205,7 +240,7 @@ export function Cube() {
               <mesh
                 key={face}
                 geometry={stickerGeometry}
-                material={stickerMaterials[face]}
+                material={materials.stickers[face]}
                 position={normal}
                 rotation={STICKER_ROTATION[face]}
               />

@@ -6,6 +6,8 @@ export const SCORING = {
   movePar: 80,
   pointsPerMoveUnderPar: 5,
   noUndoBonus: 100,
+  /** Survival pays per wave solved; surviving without solving earns nothing. */
+  pointsPerWave: 150,
   /** Each consecutive day in a streak adds this much to the multiplier, up to `maxStreak` days. */
   streakStep: 0.05,
   maxStreak: 10,
@@ -25,6 +27,8 @@ export interface PointsBreakdown {
   time: number;
   moves: number;
   noUndo: number;
+  /** Survival only: points for waves solved. */
+  waves: number;
   streakMultiplier: number;
   modeMultiplier: number;
   total: number;
@@ -45,7 +49,25 @@ export function computePoints(input: PointsInput): PointsBreakdown {
   );
   const moves = Math.max(0, SCORING.movePar - moveCount) * SCORING.pointsPerMoveUnderPar;
   const noUndo = usedUndo ? 0 : SCORING.noUndoBonus;
-  const streakMultiplier = 1 + Math.min(streak, SCORING.maxStreak) * SCORING.streakStep;
+  const streakMultiplier = streakMultiplierFor(streak);
   const total = Math.round((time + moves + noUndo) * streakMultiplier * modeMultiplier);
-  return { time, moves, noUndo, streakMultiplier, modeMultiplier, total };
+  return { time, moves, noUndo, waves: 0, streakMultiplier, modeMultiplier, total };
+}
+
+function streakMultiplierFor(streak: number): number {
+  return 1 + Math.min(streak, SCORING.maxStreak) * SCORING.streakStep;
+}
+
+/** Points for a survival run: only waves solved count, boosted by the streak. */
+export function computeSurvivalPoints(input: {
+  cleared: number;
+  streak?: number;
+}): PointsBreakdown {
+  const { cleared, streak = 0 } = input;
+  if (!Number.isInteger(cleared) || cleared < 0) throw new RangeError('cleared must be >= 0');
+  if (!Number.isInteger(streak) || streak < 0) throw new RangeError('streak must be >= 0');
+  const waves = cleared * SCORING.pointsPerWave;
+  const streakMultiplier = streakMultiplierFor(streak);
+  const total = Math.round(waves * streakMultiplier);
+  return { time: 0, moves: 0, noUndo: 0, waves, streakMultiplier, modeMultiplier: 1, total };
 }

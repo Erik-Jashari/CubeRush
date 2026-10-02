@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatTime, utcDateKey } from './time';
+import { formatTime } from './time';
 
 describe('formatTime', () => {
   it('shows seconds and centiseconds under a minute', () => {
@@ -15,11 +15,5 @@ describe('formatTime', () => {
 
   it('clamps negative values', () => {
     expect(formatTime(-5)).toBe('0.00');
-  });
-});
-
-describe('utcDateKey', () => {
-  it('uses the UTC date', () => {
-    expect(utcDateKey(new Date('2026-10-02T23:30:00-05:00'))).toBe('2026-10-03');
   });
 });

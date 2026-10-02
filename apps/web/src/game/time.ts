@@ -9,8 +9,3 @@ export function formatTime(ms: number): string {
   if (minutes === 0) return `${seconds}.${cc}`;
   return `${minutes}:${String(seconds).padStart(2, '0')}.${cc}`;
 }
-
-/** Today's UTC date as `YYYY-MM-DD`, the key for the daily scramble. */
-export function utcDateKey(date = new Date()): string {
-  return date.toISOString().slice(0, 10);
-}

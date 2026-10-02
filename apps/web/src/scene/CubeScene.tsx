@@ -1,8 +1,8 @@
 import { OrbitControls } from '@react-three/drei';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { useEffect, useMemo } from 'react';
-import { Vector3 } from 'three';
-import { useGame } from '../game/store';
+import { MOUSE, Vector3 } from 'three';
+import { colorsHidden, useGame } from '../game/store';
 import { Cube } from './Cube';
 
 const FOV = 40;
@@ -11,6 +11,11 @@ const CUBE_RADIUS = 1.5 * Math.sqrt(3);
 /** Margins around the cube; the HUD sits above and below it, so vertical needs more room. */
 const V_MARGIN = 1.35;
 const H_MARGIN = 1.1;
+/**
+ * Left-drag on the background and right-drag anywhere (even on the cube) orbit the camera;
+ * left-drag on the cube turns layers instead (see Cube.tsx).
+ */
+const MOUSE_BUTTONS = { LEFT: MOUSE.ROTATE, MIDDLE: MOUSE.DOLLY, RIGHT: MOUSE.ROTATE };
 /** On the home screen the camera looks below the cube so it sits above the menu panel. */
 const HOME_LIFT = 0.14;
 
@@ -48,6 +53,7 @@ function CameraRig({ onHome }: { onHome: boolean }) {
     <OrbitControls
       makeDefault
       enablePan={false}
+      mouseButtons={MOUSE_BUTTONS}
       minDistance={distance * 0.6}
       maxDistance={distance * 1.6}
       autoRotate={onHome}
@@ -57,7 +63,8 @@ function CameraRig({ onHome }: { onHome: boolean }) {
 }
 
 export function CubeScene() {
-  const onHome = useGame((s) => s.screen === 'home');
+  const onHome = useGame((s) => s.screen !== 'play');
+  const look = useGame((s) => (colorsHidden(s) ? 'hidden' : 'normal'));
   return (
     <Canvas
       className="scene"
@@ -68,7 +75,7 @@ export function CubeScene() {
       <ambientLight intensity={1.1} />
       <directionalLight position={[5, 8, 6]} intensity={1.6} />
       <directionalLight position={[-6, -3, -5]} intensity={0.5} />
-      <Cube />
+      <Cube source={useGame.getState} interactive look={look} />
       <CameraRig onHome={onHome} />
     </Canvas>
   );

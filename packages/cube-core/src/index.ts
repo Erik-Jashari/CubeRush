@@ -6,3 +6,5 @@ export * from './rng.js';
 export * from './scramble.js';
 export * from './verify.js';
 export * from './scoring.js';
+export * from './modes.js';
+export * from './survival.js';

@@ -9,6 +9,7 @@ describe('computePoints', () => {
       time: 500,
       moves: 100,
       noUndo: 100,
+      waves: 0,
       streakMultiplier: 1,
       modeMultiplier: 1,
       total: 700,

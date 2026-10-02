@@ -4,13 +4,14 @@ import { formatTime } from '../game/time';
 
 type TimerSource = Pick<
   ReturnType<typeof useGame.getState>,
-  'status' | 'startedAt' | 'finishedAt' | 'inspectionEndsAt'
+  'status' | 'startedAt' | 'finishedAt' | 'countdownEndsAt'
 >;
 
 export function timerText(s: TimerSource, now: number): string {
   switch (s.status) {
     case 'inspecting':
-      return String(Math.max(0, Math.ceil(((s.inspectionEndsAt ?? now) - now) / 1000)));
+    case 'memorizing':
+      return String(Math.max(0, Math.ceil(((s.countdownEndsAt ?? now) - now) / 1000)));
     case 'ready':
       return formatTime(0);
     case 'solving':
@@ -19,6 +20,14 @@ export function timerText(s: TimerSource, now: number): string {
       return formatTime((s.finishedAt ?? now) - (s.startedAt ?? now));
   }
 }
+
+const LABELS: Record<TimerSource['status'], string> = {
+  ready: 'Time',
+  inspecting: 'Inspection',
+  memorizing: 'Memorize',
+  solving: 'Time',
+  solved: 'Solved',
+};
 
 /** Updates its text every animation frame without re-rendering React. */
 export function Timer() {
@@ -37,9 +46,7 @@ export function Timer() {
 
   return (
     <div className={`timer timer--${status}`} role="timer" aria-live="off">
-      <span className="timer__label">
-        {status === 'inspecting' ? 'Inspection' : status === 'solved' ? 'Solved' : 'Time'}
-      </span>
+      <span className="timer__label">{LABELS[status]}</span>
       <span ref={ref} className="timer__value" />
     </div>
   );

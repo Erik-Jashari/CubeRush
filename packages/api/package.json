@@ -1,0 +1,13 @@
+{
+  "name": "@cuberush/api",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Request/response types and shared rules for the CubeRush HTTP API.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@cuberush/cube-core": "*"
+  }
+}
