@@ -1,4 +1,4 @@
 {
   "files": [],
-  "references": [{ "path": "packages/cube-core" }]
+  "references": [{ "path": "packages/cube-core" }, { "path": "apps/web" }]
 }

@@ -7,13 +7,15 @@ A 3D Rubik's cube game: solve seeded scrambles against the clock, earn points an
 | Path                  | What it is                                                                           |
 | --------------------- | ------------------------------------------------------------------------------------ |
 | `packages/cube-core/` | Pure TypeScript cube engine: state, moves, notation, seeded scrambles, verification, scoring |
-| `apps/web/`           | React + react-three-fiber client (coming next)                                        |
+| `apps/web/`           | React + react-three-fiber client: 3D cube, drag-to-turn, timer, scoring               |
 | `apps/server/`        | Fastify + SQLite API (coming later)                                                   |
 
 ## Commands
 
 ```sh
 npm install
+npm run dev        # play at http://localhost:5173
+npm run build      # production build of the web app
 npm test           # run all tests
 npm run typecheck  # TypeScript project build
 npm run lint
