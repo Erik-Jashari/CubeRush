@@ -1,5 +1,6 @@
-import type { MeResponse, PlayerDto } from '@cuberush/api';
+import type { MeResponse, PlayerDto, SkinId } from '@cuberush/api';
 import { create } from 'zustand';
+import { useSettings } from '../game/settings';
 import { api, ApiError } from './api';
 
 const STORAGE_KEY = 'cuberush:player';
@@ -71,3 +72,13 @@ export const useProfile = create<ProfileState>()((set, get) => ({
     set({ player: null, token: null, me: null });
   },
 }));
+
+/**
+ * The skin to draw: the player's choice if the server says they own it, classic otherwise.
+ * Editing local settings can pick a skin but never unlock one.
+ */
+export function useActiveSkin(): SkinId {
+  const chosen = useSettings((s) => s.skin);
+  const owned = useProfile((s) => s.me?.skins);
+  return chosen !== 'classic' && owned?.includes(chosen) ? chosen : 'classic';
+}

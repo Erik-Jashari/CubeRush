@@ -1,7 +1,11 @@
+import { ACHIEVEMENTS, type AchievementId } from '@cuberush/api';
 import type { PointsBreakdown } from '@cuberush/cube-core';
 import { useEffect, useRef, useState } from 'react';
 import { useGhost } from '../game/ghost';
-import { useGame, type GameMode } from '../game/store';
+import { useReplay } from '../game/replay';
+import { useSettings } from '../game/settings';
+import { playSolved } from '../game/sound';
+import { useGame, type GameMode, type SolveResult } from '../game/store';
 import { formatTime } from '../game/time';
 import { useProfile } from '../net/profile';
 import {
@@ -172,24 +176,55 @@ function SharePanel({ timeMs }: { timeMs: number }) {
   );
 }
 
+function NewAchievements({ ids }: { ids: readonly AchievementId[] }) {
+  if (ids.length === 0) return null;
+  const names = ids.map((id) => ACHIEVEMENTS.find((a) => a.id === id)?.name ?? id);
+  return (
+    <p className="result__achievements" role="status">
+      <span aria-hidden>★</span> Achievement{ids.length > 1 ? 's' : ''} unlocked:{' '}
+      {names.join(' · ')}
+    </p>
+  );
+}
+
 export function ResultModal() {
   const result = useGame((s) => s.result);
   const mode = useGame((s) => s.mode);
   const peeked = useGame((s) => s.peeked);
   const submission = useSession((s) => s.submission);
   const attemptId = useSession((s) => s.attempt?.id);
-  const { goHome, showLeaderboard } = useGame.getState();
+  const screen = useGame((s) => s.screen);
+  const { goHome, showLeaderboard, showReplay } = useGame.getState();
   const dialog = useRef<HTMLDialogElement>(null);
+  const announced = useRef<SolveResult | null>(null);
 
+  // Celebrate once per result; the card hides during a replay and comes back after it.
   useEffect(() => {
-    if (!result) {
-      dialog.current?.close();
+    const card = dialog.current;
+    if (!card) return;
+    if (!result || screen !== 'play') {
+      if (card.open) card.close();
       return;
     }
-    if (result.cleared !== 0) celebrate();
-    const id = window.setTimeout(() => dialog.current?.showModal(), SHOW_AFTER_MS);
+    if (announced.current === result) {
+      if (!card.open) card.showModal();
+      return;
+    }
+    announced.current = result;
+    if (result.cleared !== 0) {
+      celebrate();
+      if (useSettings.getState().sound) playSolved();
+    }
+    const id = window.setTimeout(() => card.showModal(), SHOW_AFTER_MS);
     return () => window.clearTimeout(id);
-  }, [result]);
+  }, [result, screen]);
+
+  const watchReplay = () => {
+    const { seed, log } = useGame.getState();
+    if (!result) return;
+    useReplay.getState().open(seed, log, result.timeMs);
+    showReplay();
+  };
 
   // The server's numbers include the streak bonus and its own undo check, so prefer them.
   const points = submission.status === 'saved' ? submission.solve.points : result?.points;
@@ -214,6 +249,9 @@ export function ResultModal() {
 
           <PointsTable points={points} mode={mode} peeked={peeked} />
           <SubmissionStatus submission={submission} />
+          {submission.status === 'saved' && (
+            <NewAchievements ids={submission.solve.newAchievements} />
+          )}
           {mode === 'quick' && submission.status === 'saved' && (
             <SharePanel key={attemptId} timeMs={result.timeMs} />
           )}
@@ -227,6 +265,11 @@ export function ResultModal() {
             <button className="btn" onClick={() => void startRound(mode, { retry: true })}>
               Try again
             </button>
+            {result.cleared === null && (
+              <button className="btn" onClick={watchReplay}>
+                Watch replay
+              </button>
+            )}
             <button className="btn" onClick={leave(showLeaderboard)}>
               Leaderboard
             </button>

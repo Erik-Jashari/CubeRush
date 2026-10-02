@@ -23,7 +23,7 @@ import {
 import { create } from 'zustand';
 
 export type GameMode = Mode;
-export type Screen = 'home' | 'play' | 'leaderboard' | 'challenge';
+export type Screen = 'home' | 'play' | 'leaderboard' | 'challenge' | 'profile' | 'replay';
 /**
  * `ready`: scrambled, waiting for the first turn. `inspecting`: optional look before the clock.
  * `memorizing`: blindfold preview, turns locked. The timer runs only while `solving`.
@@ -84,6 +84,11 @@ interface GameState {
   goHome(): void;
   showLeaderboard(): void;
   showChallenge(): void;
+  showProfile(): void;
+  /** Watches the finished round back; the round itself is kept. */
+  showReplay(): void;
+  /** Returns from the replay to the finished round. */
+  backToResult(): void;
   turn(move: Move, now?: number): void;
   undo(now?: number): void;
   /** Starts the timer when inspection or memorization runs out. */
@@ -136,7 +141,7 @@ const BLANK_ROUND = {
 };
 
 /** Menus show a solved cube that can't be turned. */
-function idleScreen(screen: Exclude<Screen, 'play'>) {
+function idleScreen(screen: Exclude<Screen, 'play' | 'replay'>) {
   return {
     screen,
     ...BLANK_ROUND,
@@ -255,6 +260,18 @@ export const useGame = create<GameState>()((set, get) => {
 
     showChallenge() {
       set(idleScreen('challenge'));
+    },
+
+    showProfile() {
+      set(idleScreen('profile'));
+    },
+
+    showReplay() {
+      if (get().result) set({ screen: 'replay' });
+    },
+
+    backToResult() {
+      if (get().screen === 'replay') set({ screen: 'play' });
     },
 
     turn(move, now = performance.now()) {

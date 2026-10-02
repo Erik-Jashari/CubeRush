@@ -5,8 +5,12 @@ import type {
   GhostDto,
   Mode,
   PlayerDto,
+  SkinId,
+  StatSolveDto,
   TimedMoveDto,
 } from '@cuberush/api';
+import type { PlayerFacts } from './achievements.js';
+import { longestStreak } from './achievements.js';
 import type { Db } from './db.js';
 
 export interface AttemptRow {
@@ -134,6 +138,33 @@ export function createRepo(db: Db) {
       )
       WHERE rank <= ? OR player_id = ?
       ORDER BY rank`),
+    spent: db.prepare('SELECT COALESCE(SUM(cost), 0) AS spent FROM unlocks WHERE player_id = ?'),
+    skins: db.prepare('SELECT skin FROM unlocks WHERE player_id = ? ORDER BY created_at'),
+    insertUnlock: db.prepare(
+      'INSERT INTO unlocks (player_id, skin, cost, created_at) VALUES (?, ?, ?, ?)',
+    ),
+    solveFacts: db.prepare(`
+      SELECT COUNT(*) AS solves,
+             MIN(time_ms) AS best_ms,
+             MIN(move_count) AS fewest_moves,
+             COALESCE(SUM(used_undo = 0), 0) AS without_undo,
+             COALESCE(MAX(mode = 'blindfold' AND json_extract(extra, '$.peeked') = 0), 0) AS blind
+      FROM solves WHERE player_id = ? AND mode <> 'survival'`),
+    mostWaves: db.prepare(`
+      SELECT COALESCE(MAX(json_extract(extra, '$.cleared')), 0) AS waves
+      FROM solves WHERE player_id = ? AND mode = 'survival'`),
+    beatChallenge: db.prepare(`
+      SELECT 1 FROM solves s
+      JOIN attempts a ON a.id = s.attempt_id
+      JOIN challenges c ON c.code = a.challenge_code
+      JOIN solves original ON original.id = c.solve_id
+      WHERE s.player_id = @player AND original.player_id <> @player AND s.time_ms < original.time_ms
+      LIMIT 1`),
+    statSolves: db.prepare(`
+      SELECT time_ms, move_count, mode, ranked, created_at FROM solves
+      WHERE player_id = ? AND mode <> 'survival'
+      ORDER BY created_at DESC, id DESC
+      LIMIT ?`),
   };
 
   return {
@@ -204,6 +235,71 @@ export function createRepo(db: Db) {
         time_ms: number;
       }[];
       return rows.map((r) => ({ rank: r.rank, nickname: r.nickname, timeMs: r.time_ms }));
+    },
+
+    /** Points spent on skins; the balance is ranked points earned minus this. */
+    spent(playerId: string): number {
+      return (statements.spent.get(playerId) as { spent: number }).spent;
+    },
+
+    /** Skins the player owns; classic is free for everyone. */
+    skins(playerId: string): SkinId[] {
+      const rows = statements.skins.all(playerId) as { skin: SkinId }[];
+      return ['classic', ...rows.map((r) => r.skin)];
+    },
+
+    /** Buys a skin if the player can afford it; the balance check and purchase are atomic. */
+    unlock: db.transaction(
+      (playerId: string, skin: SkinId, cost: number, now: number): 'ok' | 'owned' | 'poor' => {
+        if (statements.skins.all(playerId).some((r) => (r as { skin: string }).skin === skin)) {
+          return 'owned';
+        }
+        const earned = (statements.totals.get(playerId) as { points: number }).points;
+        const spent = (statements.spent.get(playerId) as { spent: number }).spent;
+        if (earned - spent < cost) return 'poor';
+        statements.insertUnlock.run(playerId, skin, cost, now);
+        return 'ok';
+      },
+    ),
+
+    facts(playerId: string): PlayerFacts {
+      const solves = statements.solveFacts.get(playerId) as {
+        solves: number;
+        best_ms: number | null;
+        fewest_moves: number | null;
+        without_undo: number;
+        blind: number;
+      };
+      const days = (statements.rankedDays.all(playerId) as { day: string }[]).map((r) => r.day);
+      return {
+        solves: solves.solves,
+        bestMs: solves.best_ms,
+        fewestMoves: solves.fewest_moves,
+        solvesWithoutUndo: solves.without_undo,
+        longestStreak: longestStreak(days),
+        mostWaves: (statements.mostWaves.get(playerId) as { waves: number }).waves,
+        blindWithoutPeek: solves.blind === 1,
+        beatAChallenge: statements.beatChallenge.get({ player: playerId }) !== undefined,
+        skinsUnlocked: statements.skins.all(playerId).length,
+      };
+    },
+
+    /** The player's latest solves (no survival runs), oldest first. */
+    statSolves(playerId: string, limit: number): StatSolveDto[] {
+      const rows = statements.statSolves.all(playerId, limit) as {
+        time_ms: number;
+        move_count: number;
+        mode: Mode;
+        ranked: number;
+        created_at: number;
+      }[];
+      return rows.reverse().map((r) => ({
+        timeMs: r.time_ms,
+        moveCount: r.move_count,
+        mode: r.mode,
+        ranked: r.ranked === 1,
+        at: r.created_at,
+      }));
     },
 
     /** The fastest ranked solve of a daily seed, for racing as a ghost. */

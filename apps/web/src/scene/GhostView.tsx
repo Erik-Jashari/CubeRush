@@ -3,6 +3,7 @@ import { useEffect, useRef } from 'react';
 import { useGhost } from '../game/ghost';
 import { useGame } from '../game/store';
 import { formatTime } from '../game/time';
+import { useActiveSkin } from '../net/profile';
 import { Cube } from './Cube';
 
 /** Ghost time on the player's clock: it starts when the player's timer does. */
@@ -40,6 +41,7 @@ function GhostClock() {
 export function GhostView() {
   const info = useGhost((s) => s.info);
   const playing = useGame((s) => s.screen === 'play');
+  const skin = useActiveSkin();
   if (!info || !playing) return null;
 
   return (
@@ -53,7 +55,7 @@ export function GhostView() {
         <ambientLight intensity={1.1} />
         <directionalLight position={[5, 8, 6]} intensity={1.6} />
         <GhostDriver />
-        <Cube source={useGhost.getState} look="ghost" />
+        <Cube source={useGhost.getState} look="ghost" skin={skin} />
       </Canvas>
       <p className="ghost__label">
         <span>Ghost · {info.label}</span>

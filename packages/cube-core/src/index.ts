@@ -8,3 +8,4 @@ export * from './verify.js';
 export * from './scoring.js';
 export * from './modes.js';
 export * from './survival.js';
+export * from './stats.js';

@@ -8,6 +8,13 @@ import { useProfile } from '../net/profile';
 import { startRound, useSession } from '../net/session';
 import { MODE_INFO } from './modes';
 
+const SETTINGS = [
+  { key: 'inspection', label: '15 s inspection before the timer starts' },
+  { key: 'ghost', label: 'Race a ghost replay when one is available' },
+  { key: 'sound', label: 'Sound effects' },
+  { key: 'melody', label: 'Melody mode: every face plays a note' },
+] as const;
+
 function NicknameForm() {
   const register = useProfile((s) => s.register);
   const [nickname, setNickname] = useState('');
@@ -96,9 +103,9 @@ export function Home() {
   const daily = useProfile((s) => s.me?.daily);
   const starting = useSession((s) => s.starting);
   const showLeaderboard = useGame((s) => s.showLeaderboard);
-  const inspection = useSettings((s) => s.inspection);
-  const ghost = useSettings((s) => s.ghost);
-  const update = useSettings((s) => s.update);
+  const settings = useSettings();
+  const { update } = settings;
+  const showProfile = useGame((s) => s.showProfile);
 
   // Points, streak and the daily status may have changed since the last visit.
   useEffect(() => {
@@ -145,27 +152,31 @@ export function Home() {
               </button>
             ))}
           </div>
-          <button className="btn" onClick={showLeaderboard}>
-            Leaderboard
-          </button>
+          <div className="home__row">
+            <button className="btn" onClick={showLeaderboard}>
+              Leaderboard
+            </button>
+            {player && (
+              <button className="btn" onClick={showProfile}>
+                Profile
+              </button>
+            )}
+          </div>
         </div>
 
-        <label className="toggle">
-          <input
-            type="checkbox"
-            checked={inspection}
-            onChange={(e) => update({ inspection: e.target.checked })}
-          />
-          <span>15 s inspection before the timer starts</span>
-        </label>
-        <label className="toggle">
-          <input
-            type="checkbox"
-            checked={ghost}
-            onChange={(e) => update({ ghost: e.target.checked })}
-          />
-          <span>Race a ghost replay when one is available</span>
-        </label>
+        <details className="settings">
+          <summary>Settings</summary>
+          {SETTINGS.map(({ key, label }) => (
+            <label key={key} className="toggle">
+              <input
+                type="checkbox"
+                checked={settings[key]}
+                onChange={(e) => update({ [key]: e.target.checked })}
+              />
+              <span>{label}</span>
+            </label>
+          ))}
+        </details>
       </div>
     </main>
   );

@@ -33,6 +33,13 @@ npm run format
 | `DATABASE_PATH` | `apps/server/data/cuberush.db`  | SQLite file, created on first run                    |
 | `TRUST_PROXY`   | unset                           | Set to `1` behind a reverse proxy so rate limits see real IPs |
 
+To run a second local stack next to `npm run dev`, give it its own API port and database, and point Vite at it:
+
+```sh
+PORT=3200 DATABASE_PATH=/tmp/test.db npm start               # API
+API_PORT=3200 npm run dev -w @cuberush/web -- --port 5180     # web
+```
+
 ## Game modes
 
 | Mode           | How it works                                                                                   |
@@ -45,6 +52,16 @@ npm run format
 
 Retrying any scramble races a ghost of your last run on it. Camera: drag the background, or right-drag
 anywhere (even on the cube), to look around.
+
+## Progression
+
+- **Points** from ranked solves count toward the all-time leaderboard and can be spent on **skins** (Pastel, Neon,
+  Wood). Spending never lowers the leaderboard total. Ownership lives on the server, so editing local settings can
+  pick a skin but not unlock one.
+- **Profile**: personal best, Ao5/Ao12 (best and worst dropped), a progress chart, achievements, and skins.
+- **Achievements** are worked out on the server from verified solves; a result card shows any a solve unlocked.
+- **Replay** any finished solve at 0.25×–2×. Turns click (or play notes in melody mode); solves end with a fanfare,
+  confetti and a small shake. Sound, melody, ghost and inspection are under Settings on the home screen.
 
 ## How a solve is trusted
 

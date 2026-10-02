@@ -4,6 +4,7 @@ import {
   MAX_SOLVE_MOVES,
   NICKNAME_PATTERN,
   NICKNAME_RULES,
+  SKINS,
   utcDateKey,
   type AllTimeLeaderboard,
   type AttemptDto,
@@ -16,9 +17,13 @@ import {
   type PlayerDto,
   type RegisterRequest,
   type RegisterResponse,
+  type StatsResponse,
   type SolveDto,
   type SubmitSolveRequest,
   type TimedMoveDto,
+  type UnlockRequest,
+  type UnlockResponse,
+  type WalletDto,
 } from '@cuberush/api';
 import {
   computePoints,
@@ -31,6 +36,7 @@ import rateLimit from '@fastify/rate-limit';
 import fastifyStatic from '@fastify/static';
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { evaluateAchievements, unlockedIds } from './achievements.js';
 import { checkSubmission, checkSurvival, RULES } from './anticheat.js';
 import type { Db } from './db.js';
 import { createRepo, currentStreak, streakLength } from './repo.js';
@@ -55,6 +61,7 @@ export interface AppOptions {
 }
 
 const LEADERBOARD_LIMIT = 50;
+const STATS_LIMIT = 500;
 const CHALLENGE_RESULTS_LIMIT = 10;
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
 
@@ -102,6 +109,11 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
   const identify = (request: FastifyRequest): PlayerDto | null => {
     const token = /^Bearer (\S+)$/.exec(request.headers.authorization ?? '')?.[1];
     return token ? (repo.playerByTokenHash(hashToken(token)) ?? null) : null;
+  };
+  const wallet = (playerId: string): WalletDto => {
+    const earned = repo.totals(playerId).points;
+    const spent = repo.spent(playerId);
+    return { earned, spent, balance: earned - spent };
   };
   const requirePlayer = async (request: FastifyRequest, reply: FastifyReply) => {
     request.player = identify(request);
@@ -152,6 +164,8 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
         const body: MeResponse = {
           player,
           totalPoints: totals.points,
+          wallet: wallet(player.id),
+          skins: repo.skins(player.id),
           solves: totals.solves,
           streak: currentStreak(repo.rankedDays(player.id), date),
           daily: {
@@ -162,6 +176,46 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
         };
         return body;
       });
+
+      api.get('/me/achievements', { preHandler: requirePlayer }, async (request) =>
+        evaluateAchievements(repo.facts(request.player!.id)),
+      );
+
+      api.get('/me/stats', { preHandler: requirePlayer }, async (request) => {
+        const body: StatsResponse = { solves: repo.statSolves(request.player!.id, STATS_LIMIT) };
+        return body;
+      });
+
+      api.post<{ Body: UnlockRequest }>(
+        '/unlocks',
+        {
+          preHandler: requirePlayer,
+          schema: {
+            body: {
+              type: 'object',
+              required: ['skin'],
+              additionalProperties: false,
+              properties: { skin: { type: 'string', maxLength: 32 } },
+            },
+          },
+        },
+        async (request, reply) => {
+          const player = request.player!;
+          const skin = SKINS.find((s) => s.id === request.body.skin);
+          if (!skin || skin.cost === 0) {
+            return fail(reply, 404, 'unknown_skin', 'That skin can’t be unlocked.');
+          }
+          const outcome = repo.unlock(player.id, skin.id, skin.cost, now());
+          if (outcome === 'owned') {
+            return fail(reply, 409, 'already_owned', `You already own ${skin.name}.`);
+          }
+          if (outcome === 'poor') {
+            return fail(reply, 402, 'not_enough_points', `${skin.name} costs ${skin.cost} points.`);
+          }
+          const body: UnlockResponse = { wallet: wallet(player.id), skins: repo.skins(player.id) };
+          return reply.code(201).send(body);
+        },
+      );
 
       api.post<{ Body: CreateAttemptRequest }>(
         '/attempts',
@@ -329,6 +383,7 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
             };
           }
 
+          const unlockedBefore = unlockedIds(evaluateAchievements(repo.facts(player.id)));
           const stored = repo.recordSolve({
             attemptId,
             playerId: player.id,
@@ -360,6 +415,9 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
                 : null,
             streak,
             survival: result.cleared === null ? null : { cleared: result.cleared },
+            newAchievements: [...unlockedIds(evaluateAchievements(repo.facts(player.id)))].filter(
+              (id) => !unlockedBefore.has(id),
+            ),
           };
           return reply.code(201).send(body);
         },

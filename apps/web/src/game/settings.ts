@@ -1,3 +1,4 @@
+import type { SkinId } from '@cuberush/api';
 import { create } from 'zustand';
 
 export interface Settings {
@@ -5,10 +6,22 @@ export interface Settings {
   inspection: boolean;
   /** Race a ghost replay when one is available. */
   ghost: boolean;
+  /** Click on every turn and a fanfare on solves. */
+  sound: boolean;
+  /** Each face plays its own note, so a fast solve sounds like a melody. */
+  melody: boolean;
+  /** Chosen look; only applied if the player owns it. */
+  skin: SkinId;
 }
 
 const STORAGE_KEY = 'cuberush:settings';
-const DEFAULTS: Settings = { inspection: true, ghost: true };
+const DEFAULTS: Settings = {
+  inspection: true,
+  ghost: true,
+  sound: true,
+  melody: false,
+  skin: 'classic',
+};
 
 // Storage can be missing or throw (private windows, blocked site data); settings then just reset.
 function load(): Settings {
@@ -36,7 +49,7 @@ export const useSettings = create<SettingsState>()((set, get) => ({
   ...load(),
   update(patch) {
     set(patch);
-    const { inspection, ghost } = get();
-    save({ inspection, ghost });
+    const { inspection, ghost, sound, melody, skin } = get();
+    save({ inspection, ghost, sound, melody, skin });
   },
 }));

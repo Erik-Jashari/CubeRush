@@ -1,4 +1,5 @@
 import type {
+  AchievementDto,
   AllTimeLeaderboard,
   ApiErrorBody,
   AttemptDto,
@@ -8,8 +9,11 @@ import type {
   GhostDto,
   MeResponse,
   RegisterResponse,
+  SkinId,
   SolveDto,
+  StatsResponse,
   SubmitSolveRequest,
+  UnlockResponse,
 } from '@cuberush/api';
 
 export class ApiError extends Error {
@@ -74,4 +78,8 @@ export const api = {
   challenge: (code: string) =>
     request<ChallengeDto>('GET', `/challenges/${encodeURIComponent(code)}`),
   dailyGhost: (token: string) => request<GhostDto>('GET', '/daily/ghost', { token }),
+  achievements: (token: string) => request<AchievementDto[]>('GET', '/me/achievements', { token }),
+  stats: (token: string) => request<StatsResponse>('GET', '/me/stats', { token }),
+  unlock: (token: string, skin: SkinId) =>
+    request<UnlockResponse>('POST', '/unlocks', { token, body: { skin } }),
 };

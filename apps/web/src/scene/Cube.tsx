@@ -10,6 +10,7 @@ import {
   type Move,
   type Vec3,
 } from '@cuberush/cube-core';
+import type { SkinId } from '@cuberush/api';
 import { RoundedBox } from '@react-three/drei';
 import { useFrame, useThree, type ThreeEvent } from '@react-three/fiber';
 import { useMemo, useRef } from 'react';
@@ -24,13 +25,13 @@ import {
 } from 'three';
 import { dragToMove, faceNormalFromPoint, type ScreenVec } from '../game/drag';
 import { canTurn, useGame } from '../game/store';
-import { STICKER_COLORS } from './colors';
+import { getWoodTexture, SKIN_LOOKS } from './skins';
 
 const CUBIE_SIZE = 0.95;
 const STICKER_SIZE = 0.82;
 const STICKER_OFFSET = CUBIE_SIZE / 2 + 0.002;
 /** Duration of one quarter turn; turns queued up behind it play faster so input never lags. */
-const TURN_MS = 160;
+export const TURN_MS = 160;
 const MIN_TURN_MS = 45;
 
 /** Rotation that turns a +z-facing plane to face each side. */
@@ -65,27 +66,46 @@ const stickerGeometry = roundedSquare(STICKER_SIZE, 0.11);
 /** How the cube is drawn: normally, with blank stickers (blindfold), or see-through (ghost). */
 export type CubeLook = 'normal' | 'hidden' | 'ghost';
 
-function materialsFor(look: CubeLook) {
+type Materials = { body: MeshStandardMaterial; stickers: Record<Face, MeshStandardMaterial> };
+
+function materialsFor(look: CubeLook, skin: SkinId): Materials {
+  const style = SKIN_LOOKS[skin];
   const ghost = look === 'ghost' ? { transparent: true, opacity: 0.55, depthWrite: false } : {};
-  const sticker = (color: string) =>
-    new MeshStandardMaterial({ color, roughness: 0.35, metalness: 0, ...ghost });
-  const blank = sticker('#4a4f60');
+  const sticker = (color: string, glow: number) =>
+    new MeshStandardMaterial({
+      color,
+      roughness: style.stickerRoughness,
+      metalness: 0,
+      emissive: color,
+      emissiveIntensity: glow,
+      ...ghost,
+    });
+  const blank = sticker('#4a4f60', 0);
   return {
-    body: new MeshStandardMaterial({ color: '#111216', roughness: 0.55, ...ghost }),
+    body: new MeshStandardMaterial({
+      color: style.body,
+      roughness: style.bodyRoughness,
+      metalness: style.bodyMetalness,
+      ...(style.bodyTexture === 'wood' ? { map: getWoodTexture() } : {}),
+      ...ghost,
+    }),
     stickers: Object.fromEntries(
-      Object.entries(STICKER_COLORS).map(([face, color]) => [
+      Object.entries(style.stickers).map(([face, color]) => [
         face,
-        look === 'hidden' ? blank : sticker(color),
+        look === 'hidden' ? blank : sticker(color, style.glow),
       ]),
     ) as Record<Face, MeshStandardMaterial>,
   };
 }
 
-const MATERIALS: Record<CubeLook, ReturnType<typeof materialsFor>> = {
-  normal: materialsFor('normal'),
-  hidden: materialsFor('hidden'),
-  ghost: materialsFor('ghost'),
-};
+/** Materials are shared by every cubie and made once per skin and look. */
+const materialCache = new Map<string, Materials>();
+function materials(look: CubeLook, skin: SkinId): Materials {
+  const key = `${skin}:${look}`;
+  let found = materialCache.get(key);
+  if (!found) materialCache.set(key, (found = materialsFor(look, skin)));
+  return found;
+}
 
 const easeOutCubic = (t: number) => 1 - (1 - t) ** 3;
 
@@ -138,12 +158,25 @@ interface CubeProps {
   /** Whether dragging turns layers (only the player's own cube). */
   interactive?: boolean;
   look?: CubeLook;
+  skin?: SkinId;
+  /** Length of one quarter turn; slow-motion replays raise it. */
+  turnMs?: number;
+  /** Called as each turn starts animating (for sounds). */
+  onTurnStart?: (move: Move, n: number) => void;
 }
 
-export function Cube({ source, interactive = false, look = 'normal' }: CubeProps) {
+export function Cube({
+  source,
+  interactive = false,
+  look = 'normal',
+  skin = 'classic',
+  turnMs = TURN_MS,
+  onTurnStart,
+}: CubeProps) {
   const n = useMemo(() => source().displayed.n, [source]);
   const pieces = useMemo(() => createSolvedCube(n).cubies, [n]);
-  const materials = MATERIALS[look];
+  const { body, stickers } = materials(look, skin);
+  const playing = useRef<Move | null>(null);
   const groups = useRef<(Group | null)[]>([]);
   const progress = useRef(0);
   const getThree = useThree((s) => s.get);
@@ -155,7 +188,7 @@ export function Cube({ source, interactive = false, look = 'normal' }: CubeProps
   useFrame((_, delta) => {
     let state = source();
     if (state.animQueue.length > 0) {
-      const ms = Math.max(MIN_TURN_MS, TURN_MS / state.animQueue.length);
+      const ms = Math.max(MIN_TURN_MS, turnMs / state.animQueue.length);
       progress.current += (delta * 1000) / ms;
       if (progress.current >= 1) {
         progress.current = 0;
@@ -165,6 +198,8 @@ export function Cube({ source, interactive = false, look = 'normal' }: CubeProps
     }
 
     const move = state.animQueue[0];
+    if (move && move !== playing.current) onTurnStart?.(move, n);
+    playing.current = move ?? null;
     const axis = move ? AXIS_INDEX[move.axis] : 0;
     const lo = move ? layerToCoord(n, move.from) : 0;
     const hi = move ? layerToCoord(n, move.to) : 0;
@@ -232,7 +267,7 @@ export function Cube({ source, interactive = false, look = 'normal' }: CubeProps
             args={[CUBIE_SIZE, CUBIE_SIZE, CUBIE_SIZE]}
             radius={0.08}
             smoothness={3}
-            material={materials.body}
+            material={body}
           />
           {cubieColors(n, piece).map((face) => {
             const normal = new Vector3(...FACE_NORMALS[face]).multiplyScalar(STICKER_OFFSET);
@@ -240,7 +275,7 @@ export function Cube({ source, interactive = false, look = 'normal' }: CubeProps
               <mesh
                 key={face}
                 geometry={stickerGeometry}
-                material={materials.stickers[face]}
+                material={stickers[face]}
                 position={normal}
                 rotation={STICKER_ROTATION[face]}
               />

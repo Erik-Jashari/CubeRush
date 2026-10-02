@@ -51,6 +51,9 @@ export interface RegisterResponse {
 export interface MeResponse {
   player: PlayerDto;
   totalPoints: number;
+  wallet: WalletDto;
+  /** Skins this player owns (always includes classic). */
+  skins: SkinId[];
   solves: number;
   /** Consecutive UTC days, up to today or yesterday, with at least one ranked solve. */
   streak: number;
@@ -105,6 +108,8 @@ export interface SolveDto {
   streak: number;
   /** Survival only. */
   survival: { cleared: number } | null;
+  /** Achievements this solve unlocked. */
+  newAchievements: AchievementId[];
 }
 
 // GET /api/leaderboard/daily?date=YYYY-MM-DD
@@ -166,4 +171,92 @@ export interface GhostDto {
   nickname: string;
   timeMs: number;
   moves: TimedMoveDto[];
+}
+
+// ---- Progression ----
+
+export type SkinId = 'classic' | 'pastel' | 'neon' | 'wood';
+
+/** Cube looks bought with points. Spending never lowers a player's leaderboard total. */
+export const SKINS: readonly { id: SkinId; name: string; cost: number }[] = [
+  { id: 'classic', name: 'Classic', cost: 0 },
+  { id: 'pastel', name: 'Pastel', cost: 1500 },
+  { id: 'neon', name: 'Neon', cost: 3000 },
+  { id: 'wood', name: 'Wood', cost: 5000 },
+];
+
+export interface WalletDto {
+  /** All points from ranked solves (the leaderboard total). */
+  earned: number;
+  spent: number;
+  balance: number;
+}
+
+// POST /api/unlocks
+export interface UnlockRequest {
+  skin: SkinId;
+}
+export interface UnlockResponse {
+  wallet: WalletDto;
+  skins: SkinId[];
+}
+
+export type AchievementId =
+  | 'first-solve'
+  | 'sub-60'
+  | 'sub-30'
+  | 'efficient'
+  | 'clean-10'
+  | 'streak-3'
+  | 'streak-10'
+  | 'survivor'
+  | 'blind'
+  | 'challenger'
+  | 'collector';
+
+/** `target` is set for achievements earned by counting something (days, waves, solves). */
+export const ACHIEVEMENTS: readonly {
+  id: AchievementId;
+  name: string;
+  description: string;
+  target?: number;
+}[] = [
+  { id: 'first-solve', name: 'First solve', description: 'Solve a scramble.' },
+  { id: 'sub-60', name: 'Sub-60', description: 'Solve in under a minute.' },
+  { id: 'sub-30', name: 'Sub-30', description: 'Solve in under 30 seconds.' },
+  { id: 'efficient', name: 'Efficient', description: 'Solve in 50 moves or fewer.' },
+  { id: 'clean-10', name: 'Clean hands', description: 'Solve 10 times without undo.', target: 10 },
+  { id: 'streak-3', name: 'On a roll', description: 'Play 3 days in a row.', target: 3 },
+  { id: 'streak-10', name: '10 days in a row', description: 'Play 10 days in a row.', target: 10 },
+  {
+    id: 'survivor',
+    name: 'Survivor',
+    description: 'Solve 5 waves in one survival run.',
+    target: 5,
+  },
+  { id: 'blind', name: 'Eyes closed', description: 'Finish a blindfold solve without peeking.' },
+  { id: 'challenger', name: 'Challenger', description: 'Beat a friend’s challenge time.' },
+  { id: 'collector', name: 'Collector', description: 'Unlock a skin.' },
+];
+
+// GET /api/me/achievements
+export interface AchievementDto {
+  id: AchievementId;
+  unlocked: boolean;
+  /** Progress toward `target`, for counted achievements. */
+  progress: number | null;
+}
+
+// GET /api/me/stats
+export interface StatSolveDto {
+  timeMs: number;
+  moveCount: number;
+  mode: Mode;
+  ranked: boolean;
+  /** When the solve was submitted (epoch ms). */
+  at: number;
+}
+export interface StatsResponse {
+  /** Up to the latest 500 solves (survival runs excluded), oldest first. */
+  solves: StatSolveDto[];
 }

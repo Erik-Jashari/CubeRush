@@ -1,9 +1,14 @@
 import { OrbitControls } from '@react-three/drei';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { useEffect, useMemo } from 'react';
-import { MOUSE, Vector3 } from 'three';
+import type { Move } from '@cuberush/cube-core';
+import { useEffect, useMemo, useRef, type ReactNode } from 'react';
+import { Group, MOUSE, Vector3 } from 'three';
+import { useReplay } from '../game/replay';
+import { useSettings } from '../game/settings';
+import { playTurn } from '../game/sound';
 import { colorsHidden, useGame } from '../game/store';
-import { Cube } from './Cube';
+import { useActiveSkin } from '../net/profile';
+import { Cube, TURN_MS } from './Cube';
 
 const FOV = 40;
 /** Radius of a sphere around a 3x3 (half its space diagonal). */
@@ -62,9 +67,61 @@ function CameraRig({ onHome }: { onHome: boolean }) {
   );
 }
 
+const SHAKE_MS = 450;
+
+/** A short shake of the whole cube when a solve lands. */
+function Shake({ children }: { children: ReactNode }) {
+  const group = useRef<Group>(null);
+  const startedAt = useRef<number | null>(null);
+
+  useEffect(
+    () =>
+      useGame.subscribe((state, prev) => {
+        const solved = state.result && !prev.result && state.result.cleared !== 0;
+        if (solved && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+          startedAt.current = performance.now();
+        }
+      }),
+    [],
+  );
+
+  useFrame(() => {
+    const g = group.current;
+    if (!g || startedAt.current === null) return;
+    const t = (performance.now() - startedAt.current) / SHAKE_MS;
+    if (t >= 1) {
+      g.position.set(0, 0, 0);
+      startedAt.current = null;
+      return;
+    }
+    const strength = 0.12 * (1 - t) ** 2;
+    g.position.set(
+      Math.sin(t * 70) * strength,
+      Math.cos(t * 83) * strength * 0.7,
+      Math.sin(t * 61) * strength * 0.5,
+    );
+  });
+
+  return <group ref={group}>{children}</group>;
+}
+
+/** Runs the replay clock while the replay screen is open. */
+function ReplayDriver() {
+  useFrame((_, delta) => useReplay.getState().advance(delta * 1000));
+  return null;
+}
+
+function onTurnStart(move: Move, n: number) {
+  const { sound, melody } = useSettings.getState();
+  if (sound) playTurn(move, n, melody);
+}
+
 export function CubeScene() {
-  const onHome = useGame((s) => s.screen !== 'play');
+  const onHome = useGame((s) => s.screen !== 'play' && s.screen !== 'replay');
+  const replaying = useGame((s) => s.screen === 'replay');
   const look = useGame((s) => (colorsHidden(s) ? 'hidden' : 'normal'));
+  const speed = useReplay((s) => s.speed);
+  const skin = useActiveSkin();
   return (
     <Canvas
       className="scene"
@@ -75,7 +132,27 @@ export function CubeScene() {
       <ambientLight intensity={1.1} />
       <directionalLight position={[5, 8, 6]} intensity={1.6} />
       <directionalLight position={[-6, -3, -5]} intensity={0.5} />
-      <Cube source={useGame.getState} interactive look={look} />
+      <Shake>
+        {replaying ? (
+          <Cube
+            key="replay"
+            source={useReplay.getState}
+            skin={skin}
+            turnMs={TURN_MS / speed}
+            onTurnStart={onTurnStart}
+          />
+        ) : (
+          <Cube
+            key="game"
+            source={useGame.getState}
+            interactive
+            look={look}
+            skin={skin}
+            onTurnStart={onTurnStart}
+          />
+        )}
+      </Shake>
+      {replaying && <ReplayDriver />}
       <CameraRig onHome={onHome} />
     </Canvas>
   );

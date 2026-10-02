@@ -6,6 +6,8 @@ import { ChallengeScreen } from './ui/ChallengeScreen';
 import { Home } from './ui/Home';
 import { Hud } from './ui/Hud';
 import { Leaderboard } from './ui/Leaderboard';
+import { Profile } from './ui/Profile';
+import { ReplayHud } from './ui/ReplayHud';
 import { ResultModal } from './ui/ResultModal';
 
 export function App() {
@@ -28,6 +30,8 @@ export function App() {
       {screen === 'play' && <Hud />}
       {screen === 'leaderboard' && <Leaderboard />}
       {screen === 'challenge' && <ChallengeScreen />}
+      {screen === 'profile' && <Profile />}
+      {screen === 'replay' && <ReplayHud />}
       <ResultModal />
     </div>
   );

@@ -72,6 +72,16 @@ export const MIGRATIONS: readonly string[] = [
     created_at  INTEGER NOT NULL
   );
   `,
+  // Part 5: skins bought with points.
+  `
+  CREATE TABLE unlocks (
+    player_id   TEXT NOT NULL REFERENCES players(id),
+    skin        TEXT NOT NULL,
+    cost        INTEGER NOT NULL,
+    created_at  INTEGER NOT NULL,
+    PRIMARY KEY (player_id, skin)
+  );
+  `,
 ];
 
 /** Opens (creating if needed) the database at `file`, or an in-memory one for `:memory:`. */

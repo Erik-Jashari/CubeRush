@@ -5,31 +5,12 @@ import {
   type DailyEntry,
   type DailyLeaderboard,
 } from '@cuberush/api';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useGame } from '../game/store';
 import { formatTime } from '../game/time';
 import { api } from '../net/api';
 import { useProfile } from '../net/profile';
-
-type Load<T> =
-  { state: 'loading' } | { state: 'error'; message: string } | { state: 'ready'; data: T };
-
-function useBoard<T>(fetcher: (token: string | null) => Promise<T>): Load<T> {
-  const token = useProfile((s) => s.token);
-  const [load, setLoad] = useState<Load<T>>({ state: 'loading' });
-  useEffect(() => {
-    let live = true;
-    setLoad({ state: 'loading' });
-    fetcher(token).then(
-      (data) => live && setLoad({ state: 'ready', data }),
-      (error: Error) => live && setLoad({ state: 'error', message: error.message }),
-    );
-    return () => {
-      live = false;
-    };
-  }, [fetcher, token]);
-  return load;
-}
+import { useLoad, type Load } from './useLoad';
 
 interface Column<E> {
   label: string;
@@ -104,7 +85,7 @@ const ALL_TIME_COLUMNS: Column<AllTimeEntry>[] = [
 ];
 
 function DailyBoard() {
-  const load = useBoard<DailyLeaderboard>(api.dailyLeaderboard);
+  const { load } = useLoad<DailyLeaderboard>(api.dailyLeaderboard);
   const date = load.state === 'ready' ? load.data.date : utcDateKey();
   return (
     <>
@@ -115,7 +96,7 @@ function DailyBoard() {
 }
 
 function AllTimeBoard() {
-  const load = useBoard<AllTimeLeaderboard>(api.allTimeLeaderboard);
+  const { load } = useLoad<AllTimeLeaderboard>(api.allTimeLeaderboard);
   return (
     <>
       <p className="board__caption">Total points from ranked solves</p>
