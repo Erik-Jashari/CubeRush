@@ -54,6 +54,8 @@ export interface MeResponse {
   wallet: WalletDto;
   /** Skins this player owns (always includes classic). */
   skins: SkinId[];
+  /** Themes this player owns (always includes the free ones). */
+  themes: ThemeId[];
   solves: number;
   /** Consecutive UTC days, up to today or yesterday, with at least one ranked solve. */
   streak: number;
@@ -192,13 +194,33 @@ export interface WalletDto {
   balance: number;
 }
 
+export type ThemeId = 'midnight' | 'ocean' | 'sunset' | 'forest' | 'royal';
+
+/** Page color themes; free ones (cost 0) are owned by everyone. */
+export const THEMES: readonly { id: ThemeId; name: string; cost: number }[] = [
+  { id: 'midnight', name: 'Midnight', cost: 0 },
+  { id: 'ocean', name: 'Ocean', cost: 0 },
+  { id: 'sunset', name: 'Sunset', cost: 600 },
+  { id: 'forest', name: 'Forest', cost: 600 },
+  { id: 'royal', name: 'Royal', cost: 1200 },
+];
+
+export type ShopKind = 'skin' | 'theme';
+
+/** Everything in the shop, by kind. */
+export const SHOP: Readonly<
+  Record<ShopKind, readonly { id: string; name: string; cost: number }[]>
+> = { skin: SKINS, theme: THEMES };
+
 // POST /api/unlocks
 export interface UnlockRequest {
-  skin: SkinId;
+  kind: ShopKind;
+  id: SkinId | ThemeId;
 }
 export interface UnlockResponse {
   wallet: WalletDto;
   skins: SkinId[];
+  themes: ThemeId[];
 }
 
 export type AchievementId =
@@ -236,7 +258,7 @@ export const ACHIEVEMENTS: readonly {
   },
   { id: 'blind', name: 'Eyes closed', description: 'Finish a blindfold solve without peeking.' },
   { id: 'challenger', name: 'Challenger', description: 'Beat a friend’s challenge time.' },
-  { id: 'collector', name: 'Collector', description: 'Unlock a skin.' },
+  { id: 'collector', name: 'Collector', description: 'Buy a skin or theme.' },
 ];
 
 // GET /api/me/achievements

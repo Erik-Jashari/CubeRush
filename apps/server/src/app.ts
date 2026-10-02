@@ -4,7 +4,8 @@ import {
   MAX_SOLVE_MOVES,
   NICKNAME_PATTERN,
   NICKNAME_RULES,
-  SKINS,
+  SHOP,
+  THEMES,
   utcDateKey,
   type AllTimeLeaderboard,
   type AttemptDto,
@@ -62,6 +63,7 @@ export interface AppOptions {
 
 const LEADERBOARD_LIMIT = 50;
 const STATS_LIMIT = 500;
+const FREE_THEMES = THEMES.filter((t) => t.cost === 0).map((t) => t.id);
 const CHALLENGE_RESULTS_LIMIT = 10;
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
 
@@ -166,6 +168,7 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
           totalPoints: totals.points,
           wallet: wallet(player.id),
           skins: repo.skins(player.id),
+          themes: repo.themes(player.id, FREE_THEMES),
           solves: totals.solves,
           streak: currentStreak(repo.rankedDays(player.id), date),
           daily: {
@@ -193,26 +196,35 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
           schema: {
             body: {
               type: 'object',
-              required: ['skin'],
+              required: ['kind', 'id'],
               additionalProperties: false,
-              properties: { skin: { type: 'string', maxLength: 32 } },
+              properties: {
+                kind: { type: 'string', enum: ['skin', 'theme'] },
+                id: { type: 'string', maxLength: 32 },
+              },
             },
           },
         },
         async (request, reply) => {
           const player = request.player!;
-          const skin = SKINS.find((s) => s.id === request.body.skin);
-          if (!skin || skin.cost === 0) {
-            return fail(reply, 404, 'unknown_skin', 'That skin can’t be unlocked.');
+          const { kind, id } = request.body;
+          // Free items are owned by everyone and never bought.
+          const item = SHOP[kind].find((i) => i.id === id);
+          if (!item || item.cost === 0) {
+            return fail(reply, 404, 'unknown_item', 'That item can’t be unlocked.');
           }
-          const outcome = repo.unlock(player.id, skin.id, skin.cost, now());
+          const outcome = repo.unlock(player.id, kind, item.id, item.cost, now());
           if (outcome === 'owned') {
-            return fail(reply, 409, 'already_owned', `You already own ${skin.name}.`);
+            return fail(reply, 409, 'already_owned', `You already own ${item.name}.`);
           }
           if (outcome === 'poor') {
-            return fail(reply, 402, 'not_enough_points', `${skin.name} costs ${skin.cost} points.`);
+            return fail(reply, 402, 'not_enough_points', `${item.name} costs ${item.cost} points.`);
           }
-          const body: UnlockResponse = { wallet: wallet(player.id), skins: repo.skins(player.id) };
+          const body: UnlockResponse = {
+            wallet: wallet(player.id),
+            skins: repo.skins(player.id),
+            themes: repo.themes(player.id, FREE_THEMES),
+          };
           return reply.code(201).send(body);
         },
       );

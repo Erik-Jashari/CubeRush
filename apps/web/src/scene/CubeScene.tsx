@@ -7,8 +7,10 @@ import { useReplay } from '../game/replay';
 import { useSettings } from '../game/settings';
 import { playTurn } from '../game/sound';
 import { colorsHidden, useGame } from '../game/store';
+import { useTutorial } from '../game/tutorial';
 import { useActiveSkin } from '../net/profile';
 import { Cube, TURN_MS } from './Cube';
+import { MoveHint } from './MoveHint';
 
 const FOV = 40;
 /** Radius of a sphere around a 3x3 (half its space diagonal). */
@@ -23,6 +25,9 @@ const H_MARGIN = 1.1;
 const MOUSE_BUTTONS = { LEFT: MOUSE.ROTATE, MIDDLE: MOUSE.DOLLY, RIGHT: MOUSE.ROTATE };
 /** On the home screen the camera looks below the cube so it sits above the menu panel. */
 const HOME_LIFT = 0.14;
+/** Lessons pull the camera back and lift the cube into the space above the lesson card. */
+const LESSON_LIFT = 0.15;
+const LESSON_ZOOM_OUT = 1.4;
 
 /** Camera distance that fits the cube on screen in both directions, so phones see it whole. */
 function useFitDistance(): number {
@@ -37,20 +42,28 @@ function useFitDistance(): number {
   }, [width, height]);
 }
 
-function CameraRig({ onHome }: { onHome: boolean }) {
+function CameraRig({ onHome, inLesson }: { onHome: boolean; inLesson: boolean }) {
   const distance = useFitDistance();
   const camera = useThree((s) => s.camera);
   const controls = useThree((s) => s.controls) as { target: Vector3 } | null;
   const goal = useMemo(() => new Vector3(), []);
 
   useEffect(() => {
-    camera.position.setLength(distance);
-  }, [camera, distance]);
+    camera.position.setLength(distance * (inLesson ? LESSON_ZOOM_OUT : 1));
+  }, [camera, distance, inLesson]);
+
+  // Lessons about the bottom layer swing the camera underneath.
+  const view = useTutorial((s) => s.view);
+  useEffect(() => {
+    const length = camera.position.length();
+    camera.position.set(4.2, view === 'bottom' ? -3.6 : 3.6, 5.6).setLength(length);
+  }, [camera, view]);
 
   // Glide the look-at point between screens instead of jumping.
   useFrame((_, delta) => {
     if (!controls) return;
-    goal.set(0, onHome ? -distance * HOME_LIFT : 0, 0);
+    const lift = inLesson ? LESSON_LIFT : onHome ? HOME_LIFT : 0;
+    goal.set(0, -distance * lift, 0);
     controls.target.lerp(goal, 1 - Math.exp(-delta * 5));
   });
 
@@ -118,6 +131,7 @@ function onTurnStart(move: Move, n: number) {
 
 export function CubeScene() {
   const onHome = useGame((s) => s.screen !== 'play' && s.screen !== 'replay');
+  const inLesson = useGame((s) => s.screen === 'play' && s.mode === 'tutorial');
   const replaying = useGame((s) => s.screen === 'replay');
   const look = useGame((s) => (colorsHidden(s) ? 'hidden' : 'normal'));
   const speed = useReplay((s) => s.speed);
@@ -151,9 +165,10 @@ export function CubeScene() {
             onTurnStart={onTurnStart}
           />
         )}
+        <MoveHint />
       </Shake>
       {replaying && <ReplayDriver />}
-      <CameraRig onHome={onHome} />
+      <CameraRig onHome={onHome} inLesson={inLesson} />
     </Canvas>
   );
 }

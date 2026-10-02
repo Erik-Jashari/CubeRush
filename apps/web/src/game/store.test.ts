@@ -1,5 +1,7 @@
 import {
+  applyMoves,
   BLINDFOLD_MEMORIZE_MS,
+  createSolvedCube,
   invertMoves,
   parseMove,
   parseMoves,
@@ -229,5 +231,31 @@ describe('ghost', () => {
   it('ignores unreadable move lists', () => {
     useGhost.getState().load('g', { label: 'Bad', timeMs: 1 }, [{ m: 'Q', t: 0 }]);
     expect(useGhost.getState().info).toBeNull();
+  });
+});
+
+describe('tutorial mode', () => {
+  it('starts from the given cube with no countdown or timer', () => {
+    const state = applyMoves(createSolvedCube(3), parseMoves('z2 R'));
+    game().startGame('tutorial', { inspection: true, state }, 0);
+    expect(game()).toMatchObject({ screen: 'play', status: 'ready', countdownEndsAt: null });
+    expect(statesEqual(game().cube, state)).toBe(true);
+  });
+
+  it('never locks the cube or produces a result, even when solved', () => {
+    game().startGame('tutorial', { inspection: false }, 0);
+    game().turn(parseMove('R'), 10);
+    game().turn(parseMove("R'"), 20);
+    expect(game()).toMatchObject({ status: 'ready', result: null, startedAt: null });
+    game().turn(parseMove('U'), 30);
+    expect(game().log.map((e) => e.m)).toEqual(['R', "R'", 'U']);
+  });
+
+  it('undo works without a running clock', () => {
+    game().startGame('tutorial', { inspection: false }, 0);
+    game().turn(parseMove('F'), 0);
+    game().undo(5);
+    expect(game().log.map((e) => e.m)).toEqual(['F', "F'"]);
+    expect(game().undoStack).toEqual([]);
   });
 });

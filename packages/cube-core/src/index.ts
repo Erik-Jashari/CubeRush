@@ -9,3 +9,6 @@ export * from './scoring.js';
 export * from './modes.js';
 export * from './survival.js';
 export * from './stats.js';
+export * from './stages.js';
+export * from './algorithms.js';
+export * from './practice.js';

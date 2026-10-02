@@ -5,8 +5,10 @@ import type {
   GhostDto,
   Mode,
   PlayerDto,
+  ShopKind,
   SkinId,
   StatSolveDto,
+  ThemeId,
   TimedMoveDto,
 } from '@cuberush/api';
 import type { PlayerFacts } from './achievements.js';
@@ -139,9 +141,12 @@ export function createRepo(db: Db) {
       WHERE rank <= ? OR player_id = ?
       ORDER BY rank`),
     spent: db.prepare('SELECT COALESCE(SUM(cost), 0) AS spent FROM unlocks WHERE player_id = ?'),
-    skins: db.prepare('SELECT skin FROM unlocks WHERE player_id = ? ORDER BY created_at'),
+    owned: db.prepare(
+      'SELECT item FROM unlocks WHERE player_id = ? AND kind = ? ORDER BY created_at',
+    ),
+    unlockCount: db.prepare('SELECT COUNT(*) AS n FROM unlocks WHERE player_id = ?'),
     insertUnlock: db.prepare(
-      'INSERT INTO unlocks (player_id, skin, cost, created_at) VALUES (?, ?, ?, ?)',
+      'INSERT INTO unlocks (player_id, kind, item, cost, created_at) VALUES (?, ?, ?, ?, ?)',
     ),
     solveFacts: db.prepare(`
       SELECT COUNT(*) AS solves,
@@ -237,27 +242,41 @@ export function createRepo(db: Db) {
       return rows.map((r) => ({ rank: r.rank, nickname: r.nickname, timeMs: r.time_ms }));
     },
 
-    /** Points spent on skins; the balance is ranked points earned minus this. */
+    /** Points spent in the shop; the balance is ranked points earned minus this. */
     spent(playerId: string): number {
       return (statements.spent.get(playerId) as { spent: number }).spent;
     },
 
-    /** Skins the player owns; classic is free for everyone. */
-    skins(playerId: string): SkinId[] {
-      const rows = statements.skins.all(playerId) as { skin: SkinId }[];
-      return ['classic', ...rows.map((r) => r.skin)];
+    /** Items of one kind the player bought (free items are not stored). */
+    bought(playerId: string, kind: ShopKind): string[] {
+      return (statements.owned.all(playerId, kind) as { item: string }[]).map((r) => r.item);
     },
 
-    /** Buys a skin if the player can afford it; the balance check and purchase are atomic. */
+    /** Skins the player owns; classic is free for everyone. */
+    skins(playerId: string): SkinId[] {
+      return ['classic', ...(this.bought(playerId, 'skin') as SkinId[])];
+    },
+
+    /** Themes the player owns; the free ones belong to everyone. */
+    themes(playerId: string, free: readonly ThemeId[]): ThemeId[] {
+      return [...free, ...(this.bought(playerId, 'theme') as ThemeId[])];
+    },
+
+    /** Buys an item if the player can afford it; the balance check and purchase are atomic. */
     unlock: db.transaction(
-      (playerId: string, skin: SkinId, cost: number, now: number): 'ok' | 'owned' | 'poor' => {
-        if (statements.skins.all(playerId).some((r) => (r as { skin: string }).skin === skin)) {
-          return 'owned';
-        }
+      (
+        playerId: string,
+        kind: ShopKind,
+        item: string,
+        cost: number,
+        now: number,
+      ): 'ok' | 'owned' | 'poor' => {
+        const owned = statements.owned.all(playerId, kind) as { item: string }[];
+        if (owned.some((r) => r.item === item)) return 'owned';
         const earned = (statements.totals.get(playerId) as { points: number }).points;
         const spent = (statements.spent.get(playerId) as { spent: number }).spent;
         if (earned - spent < cost) return 'poor';
-        statements.insertUnlock.run(playerId, skin, cost, now);
+        statements.insertUnlock.run(playerId, kind, item, cost, now);
         return 'ok';
       },
     ),
@@ -280,7 +299,7 @@ export function createRepo(db: Db) {
         mostWaves: (statements.mostWaves.get(playerId) as { waves: number }).waves,
         blindWithoutPeek: solves.blind === 1,
         beatAChallenge: statements.beatChallenge.get({ player: playerId }) !== undefined,
-        skinsUnlocked: statements.skins.all(playerId).length,
+        unlocks: (statements.unlockCount.get(playerId) as { n: number }).n,
       };
     },
 

@@ -7,4 +7,5 @@ export const MODE_INFO: Record<GameMode, { name: string; blurb: string }> = {
   challenge: { name: 'Challenge', blurb: 'Race a friend’s solve' },
   blindfold: { name: 'Blindfold', blurb: '10 s to memorize · ×2 points' },
   survival: { name: 'Survival', blurb: 'Waves every 20 s · 3 lives' },
+  tutorial: { name: 'Lesson', blurb: 'Learn to solve, step by step' },
 };

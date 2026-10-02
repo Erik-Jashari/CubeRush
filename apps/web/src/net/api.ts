@@ -9,7 +9,7 @@ import type {
   GhostDto,
   MeResponse,
   RegisterResponse,
-  SkinId,
+  ShopKind,
   SolveDto,
   StatsResponse,
   SubmitSolveRequest,
@@ -80,6 +80,6 @@ export const api = {
   dailyGhost: (token: string) => request<GhostDto>('GET', '/daily/ghost', { token }),
   achievements: (token: string) => request<AchievementDto[]>('GET', '/me/achievements', { token }),
   stats: (token: string) => request<StatsResponse>('GET', '/me/stats', { token }),
-  unlock: (token: string, skin: SkinId) =>
-    request<UnlockResponse>('POST', '/unlocks', { token, body: { skin } }),
+  unlock: (token: string, kind: ShopKind, id: string) =>
+    request<UnlockResponse>('POST', '/unlocks', { token, body: { kind, id } }),
 };

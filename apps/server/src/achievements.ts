@@ -11,7 +11,8 @@ export interface PlayerFacts {
   mostWaves: number;
   blindWithoutPeek: boolean;
   beatAChallenge: boolean;
-  skinsUnlocked: number;
+  /** Skins and themes bought. */
+  unlocks: number;
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -40,7 +41,7 @@ const RULES: Record<AchievementId, (f: PlayerFacts) => { done: boolean; progress
   survivor: (f) => ({ done: f.mostWaves >= 5, progress: f.mostWaves }),
   blind: (f) => ({ done: f.blindWithoutPeek }),
   challenger: (f) => ({ done: f.beatAChallenge }),
-  collector: (f) => ({ done: f.skinsUnlocked > 0 }),
+  collector: (f) => ({ done: f.unlocks > 0 }),
 };
 
 export function evaluateAchievements(facts: PlayerFacts): AchievementDto[] {

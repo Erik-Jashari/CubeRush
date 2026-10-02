@@ -32,7 +32,7 @@ describe('wallet and skins', () => {
 
   it('refuses skins the player cannot afford', async () => {
     const token = await register('Shopper');
-    const res = await call('POST', '/api/unlocks', token, { skin: 'pastel' });
+    const res = await call('POST', '/api/unlocks', token, { kind: 'skin', id: 'pastel' });
     expect(res).toMatchObject({ status: 402, body: { error: 'not_enough_points' } });
   });
 
@@ -43,10 +43,14 @@ describe('wallet and skins', () => {
     const earned = before.body.wallet.earned;
     expect(earned).toBeGreaterThanOrEqual(1500);
 
-    const res = await call<UnlockResponse>('POST', '/api/unlocks', token, { skin: 'pastel' });
+    const res = await call<UnlockResponse>('POST', '/api/unlocks', token, {
+      kind: 'skin',
+      id: 'pastel',
+    });
     expect(res.status).toBe(201);
     expect(res.body).toEqual({
       skins: ['classic', 'pastel'],
+      themes: ['midnight', 'ocean'],
       wallet: { earned, spent: 1500, balance: earned - 1500 },
     });
 
@@ -57,21 +61,27 @@ describe('wallet and skins', () => {
   it('sells each skin once and only real ones', async () => {
     const token = await register('Shopper');
     await earn(token, 2);
-    expect((await call('POST', '/api/unlocks', token, { skin: 'pastel' })).status).toBe(201);
-    expect(await call('POST', '/api/unlocks', token, { skin: 'pastel' })).toMatchObject({
-      status: 409,
-      body: { error: 'already_owned' },
-    });
-    for (const skin of ['classic', 'gold']) {
-      expect(await call('POST', '/api/unlocks', token, { skin })).toMatchObject({
+    expect((await call('POST', '/api/unlocks', token, { kind: 'skin', id: 'pastel' })).status).toBe(
+      201,
+    );
+    expect(await call('POST', '/api/unlocks', token, { kind: 'skin', id: 'pastel' })).toMatchObject(
+      {
+        status: 409,
+        body: { error: 'already_owned' },
+      },
+    );
+    for (const id of ['classic', 'gold']) {
+      expect(await call('POST', '/api/unlocks', token, { kind: 'skin', id })).toMatchObject({
         status: 404,
-        body: { error: 'unknown_skin' },
+        body: { error: 'unknown_item' },
       });
     }
   });
 
   it('requires a signed-in player', async () => {
-    expect((await call('POST', '/api/unlocks', undefined, { skin: 'pastel' })).status).toBe(401);
+    expect(
+      (await call('POST', '/api/unlocks', undefined, { kind: 'skin', id: 'pastel' })).status,
+    ).toBe(401);
   });
 });
 
@@ -118,7 +128,7 @@ describe('achievements', () => {
     expect(beat.body.newAchievements).toContain('challenger');
 
     await earn(token, 1);
-    await call('POST', '/api/unlocks', token, { skin: 'pastel' });
+    await call('POST', '/api/unlocks', token, { kind: 'skin', id: 'pastel' });
 
     const list = await call<AchievementDto[]>('GET', '/api/me/achievements', token);
     expect(unlocked(list.body)).toEqual(
@@ -159,7 +169,7 @@ describe('rules', () => {
     mostWaves: 0,
     blindWithoutPeek: false,
     beatAChallenge: false,
-    skinsUnlocked: 0,
+    unlocks: 0,
   };
 
   it('a new player has nothing unlocked', () => {
@@ -192,5 +202,50 @@ describe('stats', () => {
       ['quick', 7200],
     ]);
     expect(res.body.solves[0]).toMatchObject({ moveCount: 25, ranked: true });
+  });
+});
+
+describe('themes', () => {
+  it('everyone owns the free themes', async () => {
+    const token = await register('Painter');
+    const me = await call<MeResponse>('GET', '/api/me', token);
+    expect(me.body.themes).toEqual(['midnight', 'ocean']);
+    expect(await call('POST', '/api/unlocks', token, { kind: 'theme', id: 'ocean' })).toMatchObject(
+      {
+        status: 404,
+        body: { error: 'unknown_item' },
+      },
+    );
+  });
+
+  it('sells paid themes from the same wallet as skins', async () => {
+    const token = await register('Painter');
+    expect(await call('POST', '/api/unlocks', token, { kind: 'theme', id: 'royal' })).toMatchObject(
+      { status: 402 },
+    );
+
+    await earn(token, 2);
+    const res = await call<UnlockResponse>('POST', '/api/unlocks', token, {
+      kind: 'theme',
+      id: 'sunset',
+    });
+    expect(res.status).toBe(201);
+    expect(res.body.themes).toEqual(['midnight', 'ocean', 'sunset']);
+    expect(res.body.wallet.spent).toBe(600);
+    expect(res.body.skins).toEqual(['classic']);
+
+    const again = await call('POST', '/api/unlocks', token, { kind: 'theme', id: 'sunset' });
+    expect(again).toMatchObject({ status: 409, body: { error: 'already_owned' } });
+  });
+
+  it('rejects mismatched kinds', async () => {
+    const token = await register('Painter');
+    await earn(token, 2);
+    expect(await call('POST', '/api/unlocks', token, { kind: 'skin', id: 'sunset' })).toMatchObject(
+      { status: 404 },
+    );
+    expect((await call('POST', '/api/unlocks', token, { kind: 'hat', id: 'sunset' })).status).toBe(
+      400,
+    );
   });
 });

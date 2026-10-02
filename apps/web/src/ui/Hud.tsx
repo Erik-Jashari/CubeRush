@@ -1,3 +1,4 @@
+import type { Mode } from '@cuberush/api';
 import { formatMoves, SURVIVAL } from '@cuberush/cube-core';
 import { useEffect, useRef } from 'react';
 import { useGame } from '../game/store';
@@ -97,8 +98,7 @@ function Hint() {
   return null;
 }
 
-export function Hud() {
-  const mode = useGame((s) => s.mode);
+export function Hud({ mode }: { mode: Mode }) {
   const moveCount = useGame((s) => s.moveCount);
   const scramble = useGame((s) => s.scramble);
   const canUndo = useGame((s) => s.status === 'solving' && s.undoStack.length > 0);

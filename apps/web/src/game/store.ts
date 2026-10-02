@@ -22,8 +22,9 @@ import {
 } from '@cuberush/cube-core';
 import { create } from 'zustand';
 
-export type GameMode = Mode;
-export type Screen = 'home' | 'play' | 'leaderboard' | 'challenge' | 'profile' | 'replay';
+/** Server modes plus the tutorial, which never times or submits anything. */
+export type GameMode = Mode | 'tutorial';
+export type Screen = 'home' | 'play' | 'leaderboard' | 'challenge' | 'profile' | 'replay' | 'learn';
 /**
  * `ready`: scrambled, waiting for the first turn. `inspecting`: optional look before the clock.
  * `memorizing`: blindfold preview, turns locked. The timer runs only while `solving`.
@@ -52,6 +53,8 @@ export interface StartOptions {
   inspection: boolean;
   /** Overrides the seed; otherwise each mode picks its own. */
   seed?: string;
+  /** Tutorial only: the cube to start from (solved if omitted). */
+  state?: CubeState;
 }
 
 interface GameState {
@@ -85,6 +88,7 @@ interface GameState {
   showLeaderboard(): void;
   showChallenge(): void;
   showProfile(): void;
+  showLearn(): void;
   /** Watches the finished round back; the round itself is kept. */
   showReplay(): void;
   /** Returns from the replay to the finished round. */
@@ -121,6 +125,7 @@ function randomSeed(prefix: string): string {
 function seedFor(mode: GameMode, options: StartOptions): string {
   if (options.seed !== undefined) return options.seed;
   if (mode === 'daily') return dailySeed(utcDateKey());
+  if (mode === 'tutorial') return 'tutorial';
   return randomSeed(mode === 'blindfold' ? 'blind' : mode);
 }
 
@@ -153,7 +158,12 @@ function idleScreen(screen: Exclude<Screen, 'play' | 'replay'>) {
   };
 }
 
-function freshRound(mode: GameMode, seed: string, inspection: boolean, now: number) {
+function freshRound(mode: GameMode, seed: string, options: StartOptions, now: number) {
+  const { inspection } = options;
+  if (mode === 'tutorial') {
+    const cube = options.state ?? SOLVED;
+    return { ...BLANK_ROUND, seed, scramble: [], cube, displayed: cube, status: 'ready' as Status };
+  }
   if (mode === 'survival') {
     // The clock starts at once: wave 0 is already ticking.
     const { run, events } = startSurvival(seed);
@@ -223,6 +233,17 @@ export const useGame = create<GameState>()((set, get) => {
       return;
     }
 
+    if (s.mode === 'tutorial') {
+      // Lessons judge progress themselves; the clock never runs and the cube never locks.
+      set({
+        ...logged,
+        startedAt: null,
+        cube: applyMove(s.cube, move),
+        animQueue: [...s.animQueue, move],
+      });
+      return;
+    }
+
     const cube = applyMove(s.cube, move);
     const solved = isSolved(cube);
     const points = computePoints({
@@ -247,7 +268,7 @@ export const useGame = create<GameState>()((set, get) => {
 
     startGame(mode, options, now = performance.now()) {
       const seed = seedFor(mode, options);
-      set({ screen: 'play', mode, ...freshRound(mode, seed, options.inspection, now) });
+      set({ screen: 'play', mode, ...freshRound(mode, seed, options, now) });
     },
 
     goHome() {
@@ -266,6 +287,10 @@ export const useGame = create<GameState>()((set, get) => {
       set(idleScreen('profile'));
     },
 
+    showLearn() {
+      set(idleScreen('learn'));
+    },
+
     showReplay() {
       if (get().result) set({ screen: 'replay' });
     },
@@ -280,7 +305,10 @@ export const useGame = create<GameState>()((set, get) => {
 
     undo(now = performance.now()) {
       const last = get().undoStack.at(-1);
-      if (last && get().status === 'solving') applyTurn(invertMove(last), now, true);
+      const { status, mode } = get();
+      if (last && (status === 'solving' || mode === 'tutorial')) {
+        applyTurn(invertMove(last), now, true);
+      }
     },
 
     endCountdown(now = performance.now()) {

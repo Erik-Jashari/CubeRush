@@ -1,19 +1,22 @@
 import {
   ACHIEVEMENTS,
-  SKINS,
+  SHOP,
+  type ShopKind,
   type AchievementDto,
   type SkinId,
+  type ThemeId,
   type StatsResponse,
 } from '@cuberush/api';
 import { summarizeTimes } from '@cuberush/cube-core';
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useSettings } from '../game/settings';
 import { useGame } from '../game/store';
 import { formatTime } from '../game/time';
 import { api, ApiError } from '../net/api';
-import { useActiveSkin, useProfile } from '../net/profile';
+import { useActiveSkin, useActiveTheme, useProfile } from '../net/profile';
 import { SKIN_LOOKS } from '../scene/skins';
 import { SolveChart } from './SolveChart';
+import { ThemeChip } from './ThemeChip';
 import { useLoad } from './useLoad';
 
 const CHART_SOLVES = 50;
@@ -119,26 +122,30 @@ function Swatch({ skin }: { skin: SkinId }) {
   );
 }
 
-function SkinsTab() {
-  const token = useProfile((s) => s.token);
-  const me = useProfile((s) => s.me);
+interface ShopSectionProps {
+  kind: ShopKind;
+  title: string;
+  owned: readonly string[];
+  active: string;
+  preview: (id: string) => ReactNode;
+  equip: (id: string) => void;
+}
+
+/** One row per item: equipped, equip, or unlock with points. */
+function ShopSection({ kind, title, owned, active, preview, equip }: ShopSectionProps) {
+  const token = useProfile((s) => s.token)!;
+  const balance = useProfile((s) => s.me?.wallet.balance ?? 0);
   const refresh = useProfile((s) => s.refresh);
-  const active = useActiveSkin();
-  const update = useSettings((s) => s.update);
-  const [busy, setBusy] = useState<SkinId | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
-  if (!token || !me) {
-    return <p className="board__note">Pick a nickname to earn points and unlock skins.</p>;
-  }
-
-  const unlock = async (skin: SkinId) => {
-    setBusy(skin);
+  const unlock = async (id: string) => {
+    setBusy(id);
     setMessage(null);
     try {
-      await api.unlock(token, skin);
+      await api.unlock(token, kind, id);
       await refresh();
-      update({ skin });
+      equip(id);
     } catch (error) {
       setMessage(error instanceof ApiError ? error.message : 'Something went wrong.');
     } finally {
@@ -147,52 +154,84 @@ function SkinsTab() {
   };
 
   return (
-    <>
-      <p className="wallet">
-        <span className="wallet__value">{me.wallet.balance.toLocaleString()}</span> points to spend
-        <span className="board__caption"> · spending never lowers your leaderboard total</span>
-      </p>
+    <section className="shop">
+      <h3 className="shop__title">{title}</h3>
       {message && <p className="board__note board__note--bad">{message}</p>}
       <ul className="skins">
-        {SKINS.map((skin) => {
-          const owned = me.skins.includes(skin.id);
-          const affordable = me.wallet.balance >= skin.cost;
+        {SHOP[kind].map((item) => {
+          const affordable = balance >= item.cost;
           return (
-            <li key={skin.id} className={`skin${active === skin.id ? ' skin--on' : ''}`}>
-              <Swatch skin={skin.id} />
+            <li key={item.id} className={`skin${active === item.id ? ' skin--on' : ''}`}>
+              {preview(item.id)}
               <span className="skin__name">
-                {skin.name}
+                {item.name}
                 <span className="board__caption">
-                  {skin.cost === 0 ? 'Free' : `${skin.cost.toLocaleString()} pts`}
+                  {item.cost === 0 ? 'Free' : `${item.cost.toLocaleString()} pts`}
                 </span>
               </span>
-              {active === skin.id ? (
+              {active === item.id ? (
                 <span className="skin__state">Equipped</span>
-              ) : owned ? (
-                <button className="btn" onClick={() => update({ skin: skin.id })}>
+              ) : owned.includes(item.id) ? (
+                <button className="btn" onClick={() => equip(item.id)}>
                   Equip
                 </button>
               ) : (
                 <button
                   className="btn btn--primary"
                   disabled={!affordable || busy !== null}
-                  onClick={() => void unlock(skin.id)}
-                  title={
-                    affordable ? undefined : `You need ${skin.cost - me.wallet.balance} more points`
-                  }
+                  onClick={() => void unlock(item.id)}
+                  title={affordable ? undefined : `You need ${item.cost - balance} more points`}
                 >
-                  {busy === skin.id ? 'Unlocking…' : 'Unlock'}
+                  {busy === item.id ? 'Unlocking…' : 'Unlock'}
                 </button>
               )}
             </li>
           );
         })}
       </ul>
+    </section>
+  );
+}
+
+function ShopTab() {
+  const me = useProfile((s) => s.me);
+  const skin = useActiveSkin();
+  const theme = useActiveTheme();
+  const update = useSettings((s) => s.update);
+
+  if (!me) {
+    return (
+      <p className="board__note">Pick a nickname to earn points and unlock skins and themes.</p>
+    );
+  }
+
+  return (
+    <>
+      <p className="wallet">
+        <span className="wallet__value">{me.wallet.balance.toLocaleString()}</span> points to spend
+        <span className="board__caption"> · spending never lowers your leaderboard total</span>
+      </p>
+      <ShopSection
+        kind="skin"
+        title="Cube skins"
+        owned={me.skins}
+        active={skin}
+        preview={(id) => <Swatch skin={id as SkinId} />}
+        equip={(id) => update({ skin: id as SkinId })}
+      />
+      <ShopSection
+        kind="theme"
+        title="Themes"
+        owned={me.themes}
+        active={theme}
+        preview={(id) => <ThemeChip theme={id as ThemeId} />}
+        equip={(id) => update({ theme: id as ThemeId })}
+      />
     </>
   );
 }
 
-const TABS = { stats: 'Stats', achievements: 'Achievements', skins: 'Skins' } as const;
+const TABS = { stats: 'Stats', achievements: 'Achievements', shop: 'Shop' } as const;
 
 export function Profile() {
   const [tab, setTab] = useState<keyof typeof TABS>('stats');
@@ -224,7 +263,7 @@ export function Profile() {
         <div className="board-panel__body" role="tabpanel">
           {tab === 'stats' && <StatsTab />}
           {tab === 'achievements' && <AchievementsTab />}
-          {tab === 'skins' && <SkinsTab />}
+          {tab === 'shop' && <ShopTab />}
         </div>
       </div>
     </main>

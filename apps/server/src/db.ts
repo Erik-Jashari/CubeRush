@@ -82,6 +82,21 @@ export const MIGRATIONS: readonly string[] = [
     PRIMARY KEY (player_id, skin)
   );
   `,
+  // Part 6: the shop sells themes too, so unlocks record what kind of item they are.
+  `
+  CREATE TABLE unlocks_v2 (
+    player_id   TEXT NOT NULL REFERENCES players(id),
+    kind        TEXT NOT NULL CHECK (kind IN ('skin', 'theme')),
+    item        TEXT NOT NULL,
+    cost        INTEGER NOT NULL,
+    created_at  INTEGER NOT NULL,
+    PRIMARY KEY (player_id, kind, item)
+  );
+  INSERT INTO unlocks_v2 (player_id, kind, item, cost, created_at)
+    SELECT player_id, 'skin', skin, cost, created_at FROM unlocks;
+  DROP TABLE unlocks;
+  ALTER TABLE unlocks_v2 RENAME TO unlocks;
+  `,
 ];
 
 /** Opens (creating if needed) the database at `file`, or an in-memory one for `:memory:`. */

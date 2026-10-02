@@ -216,6 +216,29 @@ describe('daily ghost', () => {
 });
 
 describe('migrations', () => {
+  it('moves bought skins into the generalized shop table', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'cuberush-'));
+    const file = join(dir, 'v3.db');
+    try {
+      const old = new Database(file);
+      for (const sql of MIGRATIONS.slice(0, 3)) old.exec(sql);
+      old.pragma('user_version = 3');
+      old.exec(`
+        INSERT INTO players VALUES ('p1', 'Oldie', 'hash', 1);
+        INSERT INTO unlocks VALUES ('p1', 'pastel', 1500, 5);
+      `);
+      old.close();
+
+      const db = openDatabase(file);
+      expect(db.prepare('SELECT * FROM unlocks').all()).toEqual([
+        { player_id: 'p1', kind: 'skin', item: 'pastel', cost: 1500, created_at: 5 },
+      ]);
+      db.close();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('upgrades a version 1 database without losing data', () => {
     const dir = mkdtempSync(join(tmpdir(), 'cuberush-'));
     const file = join(dir, 'old.db');

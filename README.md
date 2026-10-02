@@ -53,11 +53,26 @@ API_PORT=3200 npm run dev -w @cuberush/web -- --port 5180     # web
 Retrying any scramble races a ghost of your last run on it. Camera: drag the background, or right-drag
 anywhere (even on the cube), to look around.
 
+## Learn to solve
+
+The **Learn** screen has two courses:
+
+- **Moves 101** teaches notation with an arrow on the cube showing each turn, then drills R U R′ U′ and Sune. Wrong
+  turns are caught and undone; half turns can be done as two quarter turns.
+- **Solve the cube** is the 7-step beginner method (white cross → corners → middle edges → yellow cross → yellow
+  edges → place corners → twist corners). Each step deals a practice cube with only that step left, explains the
+  algorithm (with a guided walk-through), and celebrates when the step is done.
+
+Step detection and practice cubes live in `packages/cube-core` (`stages.ts`, `practice.ts`, `algorithms.ts`). The
+lesson tests in `apps/web/src/ui/lessons.test.ts` follow each lesson's written instructions on 50 practice cubes and
+check they really finish the step, so the advice can't silently go wrong.
+
 ## Progression
 
-- **Points** from ranked solves count toward the all-time leaderboard and can be spent on **skins** (Pastel, Neon,
-  Wood). Spending never lowers the leaderboard total. Ownership lives on the server, so editing local settings can
-  pick a skin but not unlock one.
+- **Points** from ranked solves count toward the all-time leaderboard and can be spent in the **shop** on cube skins
+  (Pastel, Neon, Wood) and page themes (Sunset, Forest, Royal; Midnight and Ocean are free). Spending never lowers
+  the leaderboard total. Ownership lives on the server, so editing local settings can pick an item but not unlock
+  one.
 - **Profile**: personal best, Ao5/Ao12 (best and worst dropped), a progress chart, achievements, and skins.
 - **Achievements** are worked out on the server from verified solves; a result card shows any a solve unlocked.
 - **Replay** any finished solve at 0.25×–2×. Turns click (or play notes in melody mode); solves end with a fanfare,

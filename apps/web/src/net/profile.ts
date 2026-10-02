@@ -1,4 +1,4 @@
-import type { MeResponse, PlayerDto, SkinId } from '@cuberush/api';
+import { THEMES, type MeResponse, type PlayerDto, type SkinId, type ThemeId } from '@cuberush/api';
 import { create } from 'zustand';
 import { useSettings } from '../game/settings';
 import { api, ApiError } from './api';
@@ -81,4 +81,13 @@ export function useActiveSkin(): SkinId {
   const chosen = useSettings((s) => s.skin);
   const owned = useProfile((s) => s.me?.skins);
   return chosen !== 'classic' && owned?.includes(chosen) ? chosen : 'classic';
+}
+
+export const FREE_THEMES: readonly ThemeId[] = THEMES.filter((t) => t.cost === 0).map((t) => t.id);
+
+/** The page theme: free ones for anyone, paid ones only if the server says they're owned. */
+export function useActiveTheme(): ThemeId {
+  const chosen = useSettings((s) => s.theme);
+  const owned = useProfile((s) => s.me?.themes);
+  return FREE_THEMES.includes(chosen) || owned?.includes(chosen) ? chosen : 'midnight';
 }

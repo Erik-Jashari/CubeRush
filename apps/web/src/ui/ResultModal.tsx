@@ -26,6 +26,7 @@ const EYEBROW: Record<GameMode, string> = {
   challenge: 'Challenge complete',
   blindfold: 'Blindfold solve',
   survival: 'Run over',
+  tutorial: 'Lesson complete',
 };
 
 function SubmissionStatus({ submission }: { submission: Submission }) {
@@ -236,7 +237,7 @@ export function ResultModal() {
 
   return (
     <dialog ref={dialog} className="result" onCancel={(e) => e.preventDefault()}>
-      {result && points && (
+      {result && points && mode !== 'tutorial' && (
         <>
           <p className="result__eyebrow">{EYEBROW[mode]}</p>
           <p className="result__time">{formatTime(result.timeMs)}</p>

@@ -1,12 +1,14 @@
-import { NICKNAME_PATTERN, NICKNAME_RULES, utcDateKey } from '@cuberush/api';
+import { NICKNAME_PATTERN, NICKNAME_RULES, THEMES, utcDateKey } from '@cuberush/api';
 import { useEffect, useState, type FormEvent } from 'react';
 import { useSettings } from '../game/settings';
 import { useGame } from '../game/store';
 import { formatTime } from '../game/time';
+import { useTutorial } from '../game/tutorial';
 import { ApiError } from '../net/api';
-import { useProfile } from '../net/profile';
+import { FREE_THEMES, useActiveTheme, useProfile } from '../net/profile';
 import { startRound, useSession } from '../net/session';
 import { MODE_INFO } from './modes';
+import { ThemeChip } from './ThemeChip';
 
 const SETTINGS = [
   { key: 'inspection', label: '15 s inspection before the timer starts' },
@@ -106,11 +108,28 @@ export function Home() {
   const settings = useSettings();
   const { update } = settings;
   const showProfile = useGame((s) => s.showProfile);
+  const showLearn = useGame((s) => s.showLearn);
+  const theme = useActiveTheme();
+  const ownedThemes = useProfile((s) => s.me?.themes) ?? FREE_THEMES;
+  // Someone who has never solved here and hasn't opened a lesson gets the tutorial up front.
+  const neverSolved = useProfile((s) => (s.me?.solves ?? 0) === 0);
+  const noLessons = useTutorial((s) => s.done.length === 0);
+  const newcomer = neverSolved && noLessons;
 
   // Points, streak and the daily status may have changed since the last visit.
   useEffect(() => {
     void useProfile.getState().refresh();
   }, []);
+
+  const learnButton = (
+    <button
+      className={newcomer ? 'btn btn--big btn--highlight' : 'btn btn--big'}
+      onClick={showLearn}
+    >
+      Learn to solve
+      <small>{newcomer ? 'New to cubing? Start here' : 'Moves 101 · the beginner method'}</small>
+    </button>
+  );
 
   return (
     <main className="home">
@@ -123,6 +142,7 @@ export function Home() {
         {player ? <ProfileLine /> : <NicknameForm />}
 
         <div className="home__actions">
+          {newcomer && learnButton}
           <button
             className="btn btn--primary btn--big"
             disabled={starting}
@@ -139,6 +159,7 @@ export function Home() {
             {MODE_INFO.daily.name}
             <small>{dailySubtitle(player !== null, daily)}</small>
           </button>
+          {!newcomer && learnButton}
           <div className="home__modes">
             {(['blindfold', 'survival'] as const).map((mode) => (
               <button
@@ -176,6 +197,23 @@ export function Home() {
               <span>{label}</span>
             </label>
           ))}
+          <div className="theme-picker" role="radiogroup" aria-label="Theme">
+            <span>Theme</span>
+            {ownedThemes.map((id) => (
+              <button
+                key={id}
+                role="radio"
+                aria-checked={theme === id}
+                aria-label={THEMES.find((t) => t.id === id)?.name}
+                className={
+                  theme === id ? 'theme-picker__item theme-picker__item--on' : 'theme-picker__item'
+                }
+                onClick={() => update({ theme: id })}
+              >
+                <ThemeChip theme={id} />
+              </button>
+            ))}
+          </div>
         </details>
       </div>
     </main>

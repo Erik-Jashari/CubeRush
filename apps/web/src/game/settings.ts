@@ -1,4 +1,4 @@
-import type { SkinId } from '@cuberush/api';
+import type { SkinId, ThemeId } from '@cuberush/api';
 import { create } from 'zustand';
 
 export interface Settings {
@@ -12,6 +12,8 @@ export interface Settings {
   melody: boolean;
   /** Chosen look; only applied if the player owns it. */
   skin: SkinId;
+  /** Chosen page theme; paid ones only apply if owned. */
+  theme: ThemeId;
 }
 
 const STORAGE_KEY = 'cuberush:settings';
@@ -21,6 +23,7 @@ const DEFAULTS: Settings = {
   sound: true,
   melody: false,
   skin: 'classic',
+  theme: 'midnight',
 };
 
 // Storage can be missing or throw (private windows, blocked site data); settings then just reset.
@@ -49,7 +52,7 @@ export const useSettings = create<SettingsState>()((set, get) => ({
   ...load(),
   update(patch) {
     set(patch);
-    const { inspection, ghost, sound, melody, skin } = get();
-    save({ inspection, ghost, sound, melody, skin });
+    const { inspection, ghost, sound, melody, skin, theme } = get();
+    save({ inspection, ghost, sound, melody, skin, theme });
   },
 }));
