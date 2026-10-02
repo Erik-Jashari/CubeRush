@@ -1,0 +1,4 @@
+# Hand-written notes
+*.md
+package-lock.json
+**/dist

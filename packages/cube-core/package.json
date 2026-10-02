@@ -1,0 +1,14 @@
+{
+  "name": "@cuberush/cube-core",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Pure TypeScript Rubik's cube engine: state, moves, notation, seeded scrambles, verification and scoring.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc -b"
+  }
+}
