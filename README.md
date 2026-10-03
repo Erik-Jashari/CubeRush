@@ -2,6 +2,24 @@
 
 A 3D Rubik's cube game: solve seeded scrambles against the clock, earn points and climb the leaderboard.
 
+![A cube being solved against the clock](docs/media/solve.gif)
+
+<p>
+  <img src="docs/media/04-result.png" width="49%" alt="Result card with points breakdown and unlocked achievements">
+  <img src="docs/media/06-leaderboard-fastest.png" width="49%" alt="Fastest leaderboard">
+  <img src="docs/media/08-lesson-arrow.png" width="49%" alt="Tutorial: an arrow shows the next turn on the cube">
+  <img src="docs/media/09-hint.png" width="49%" alt="Hint button on a full scramble">
+  <img src="docs/media/11-shop.png" width="49%" alt="Shop with cube skins and page themes">
+  <img src="docs/media/12-ocean-theme.png" width="49%" alt="The Ocean theme">
+</p>
+
+<p>
+  <img src="docs/media/13-phone-home.png" width="24%" alt="Home screen on a phone">
+  <img src="docs/media/14-phone-play.png" width="24%" alt="Playing on a phone">
+</p>
+
+More screenshots are in [docs/media](docs/media).
+
 ## Layout
 
 | Path                  | What it is                                                                                   |
