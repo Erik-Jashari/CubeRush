@@ -6,7 +6,11 @@ import type {
   ChallengeDto,
   CreateAttemptRequest,
   DailyLeaderboard,
+  FastestLeaderboard,
   GhostDto,
+  LessonId,
+  LessonsResponse,
+  LoginCodeResponse,
   MeResponse,
   RegisterResponse,
   ShopKind,
@@ -14,6 +18,7 @@ import type {
   StatsResponse,
   SubmitSolveRequest,
   UnlockResponse,
+  WeeklyLeaderboard,
 } from '@cuberush/api';
 
 export class ApiError extends Error {
@@ -64,6 +69,13 @@ async function request<T>(method: 'GET' | 'POST', path: string, options: Request
 export const api = {
   register: (nickname: string) =>
     request<RegisterResponse>('POST', '/players', { body: { nickname } }),
+  login: (code: string) => request<RegisterResponse>('POST', '/login', { body: { code } }),
+  loginCode: (token: string) => request<LoginCodeResponse>('POST', '/me/login-code', { token }),
+  logout: (token: string) => request<null>('POST', '/me/logout', { token }),
+  logoutOthers: (token: string) =>
+    request<{ signedOut: number }>('POST', '/me/logout-others', { token }),
+  saveLessons: (token: string, ids: LessonId[]) =>
+    request<LessonsResponse>('POST', '/me/lessons', { token, body: { ids } }),
   me: (token: string) => request<MeResponse>('GET', '/me', { token }),
   createAttempt: (token: string, body: CreateAttemptRequest) =>
     request<AttemptDto>('POST', '/attempts', { token, body }),
@@ -71,6 +83,10 @@ export const api = {
     request<SolveDto>('POST', '/solves', { token, body }),
   dailyLeaderboard: (token: string | null) =>
     request<DailyLeaderboard>('GET', '/leaderboard/daily', { token }),
+  weeklyLeaderboard: (token: string | null) =>
+    request<WeeklyLeaderboard>('GET', '/leaderboard/weekly', { token }),
+  fastestLeaderboard: (token: string | null) =>
+    request<FastestLeaderboard>('GET', '/leaderboard/fastest', { token }),
   allTimeLeaderboard: (token: string | null) =>
     request<AllTimeLeaderboard>('GET', '/leaderboard/all-time', { token }),
   createChallenge: (token: string, attemptId: string) =>

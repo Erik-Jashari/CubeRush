@@ -1,0 +1,27 @@
+# Runs every check on each push and pull request to main, on a fresh Linux machine at GitHub.
+# A red ✗ next to a commit on GitHub means one of these steps failed; click it to see which.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      # `npm ci` installs exactly what package-lock.json lists, so CI matches your machine.
+      # --ignore-scripts: better-sqlite3 has ready-made binaries; see the Dockerfile.
+      - run: npm ci --ignore-scripts
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm test
+      - run: npm run build

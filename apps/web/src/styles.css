@@ -88,7 +88,8 @@ body {
   border-color: transparent;
 }
 .btn--primary:hover:not(:disabled) {
-  background: #ffdc66;
+  background: var(--accent);
+  filter: brightness(1.08);
 }
 .btn--ghost {
   background: transparent;
@@ -1228,4 +1229,136 @@ body {
   justify-content: space-between;
   align-items: baseline;
   gap: 0.5rem;
+}
+
+/* Keyboard cheat sheet */
+.keys {
+  width: min(640px, calc(100% - 32px));
+}
+.keys h2 {
+  margin: 0 0 0.4rem;
+  font-size: 1.2rem;
+}
+.keys__note {
+  margin: 0 0 1rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+.keys__board {
+  display: grid;
+  gap: 0.3rem;
+  margin-bottom: 1.2rem;
+  overflow-x: auto;
+}
+.keys__row {
+  display: flex;
+  gap: 0.3rem;
+}
+.keys__key {
+  display: grid;
+  justify-items: center;
+  flex: 0 0 2.6rem;
+  padding: 0.25rem 0;
+  border-radius: 8px;
+  border: 1px solid var(--panel-border);
+  color: var(--muted);
+  font-size: 0.7rem;
+  opacity: 0.45;
+}
+.keys__key--on {
+  opacity: 1;
+  background: var(--panel);
+}
+.keys__key kbd {
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  color: var(--text);
+}
+.keys__key--on span {
+  font-family: var(--mono);
+  font-weight: 700;
+  color: var(--accent);
+}
+.chip__key {
+  margin-left: 0.35rem;
+  padding: 0 0.3rem;
+  border-radius: 4px;
+  border: 1px solid currentColor;
+  font-family: var(--mono);
+  font-size: 0.7em;
+  opacity: 0.8;
+}
+
+/* Account */
+.account {
+  display: grid;
+  gap: 1.5rem;
+  text-align: left;
+}
+.account__text {
+  margin: 0 0 0.75rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+.account__text--warn {
+  color: var(--text);
+}
+.account__code {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0 0 0.75rem;
+}
+.account__code code {
+  padding: 0.5rem 0.8rem;
+  border-radius: 10px;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  font-family: var(--mono);
+  font-size: 1.1rem;
+  letter-spacing: 0.08em;
+  user-select: all;
+}
+.account__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+.input--code {
+  font-family: var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+@media (max-width: 480px) {
+  .tabs__tab {
+    font-size: 0.8rem;
+    padding: 0 0.3rem;
+  }
+}
+
+/* Whole-cube lesson */
+.lesson__progress {
+  color: var(--muted);
+}
+.lesson__progress strong {
+  color: var(--text);
+}
+.lesson__hint {
+  padding: 0.5rem 0.75rem;
+  border-left: 3px solid var(--accent);
+  border-radius: 6px;
+  background: var(--panel);
 }

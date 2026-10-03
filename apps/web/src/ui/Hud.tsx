@@ -1,9 +1,11 @@
 import type { Mode } from '@cuberush/api';
 import { formatMoves, SURVIVAL } from '@cuberush/cube-core';
 import { useEffect, useRef } from 'react';
+import { useKeyboardTurns } from '../game/keyboard';
 import { useGame } from '../game/store';
 import { useProfile } from '../net/profile';
 import { leaveRound, startRound, useSession } from '../net/session';
+import { KeyboardHelp } from './KeyboardHelp';
 import { MODE_INFO } from './modes';
 import { Timer } from './Timer';
 
@@ -115,16 +117,7 @@ export function Hud({ mode }: { mode: Mode }) {
     return () => window.clearTimeout(id);
   }, [countdownEndsAt, endCountdown]);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
-        e.preventDefault();
-        undo();
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [undo]);
+  useKeyboardTurns();
 
   const home = () => {
     leaveRound();
@@ -159,6 +152,7 @@ export function Hud({ mode }: { mode: Mode }) {
           <button className="btn" onClick={() => undo()} disabled={!canUndo}>
             Undo
           </button>
+          <KeyboardHelp />
           {canPeek && (
             <button className="btn" onClick={peek} title="Show the colors; loses the ×2 bonus">
               Peek

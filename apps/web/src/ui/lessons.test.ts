@@ -11,7 +11,9 @@ import {
   type Face,
   type Vec3,
 } from '@cuberush/cube-core';
+import { LESSON_IDS } from '@cuberush/api';
 import { describe, expect, it } from 'vitest';
+import { lessonsToUpload } from '../game/tutorial';
 import { LESSONS } from './lessons';
 
 /**
@@ -142,5 +144,16 @@ describe('lesson data', () => {
       }
       expect(isSolved(cube), lesson.id).toBe(true);
     }
+  });
+});
+
+describe('lesson ids', () => {
+  it('the server knows every lesson, and no others', () => {
+    expect(LESSONS.map((l) => l.id).sort()).toEqual([...LESSON_IDS].sort());
+  });
+
+  it('uploads only lessons the account lacks, skipping ids from old versions', () => {
+    expect(lessonsToUpload(['faces', 'cross', 'retired-lesson'], ['faces'])).toEqual(['cross']);
+    expect(lessonsToUpload(['faces'], ['faces', 'sune'])).toEqual([]);
   });
 });

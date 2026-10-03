@@ -1,0 +1,14 @@
+# Not sent to Docker when building the image: installed packages are rebuilt for Linux
+# inside the image, and local data must never end up in it.
+**/node_modules
+**/dist
+**/data
+backups
+*.db
+*.db-shm
+*.db-wal
+.git
+.github
+.vscode
+*.log
+*.tsbuildinfo

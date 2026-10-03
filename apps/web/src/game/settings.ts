@@ -10,6 +10,8 @@ export interface Settings {
   sound: boolean;
   /** Each face plays its own note, so a fast solve sounds like a melody. */
   melody: boolean;
+  /** Turn the cube with the keyboard (csTimer layout). */
+  keyboard: boolean;
   /** Chosen look; only applied if the player owns it. */
   skin: SkinId;
   /** Chosen page theme; paid ones only apply if owned. */
@@ -22,6 +24,7 @@ const DEFAULTS: Settings = {
   ghost: true,
   sound: true,
   melody: false,
+  keyboard: true,
   skin: 'classic',
   theme: 'midnight',
 };
@@ -52,7 +55,7 @@ export const useSettings = create<SettingsState>()((set, get) => ({
   ...load(),
   update(patch) {
     set(patch);
-    const { inspection, ghost, sound, melody, skin, theme } = get();
-    save({ inspection, ghost, sound, melody, skin, theme });
+    const { inspection, ghost, sound, melody, keyboard, skin, theme } = get();
+    save({ inspection, ghost, sound, melody, keyboard, skin, theme });
   },
 }));

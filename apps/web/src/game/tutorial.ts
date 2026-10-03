@@ -1,9 +1,11 @@
+import { LESSON_IDS, type LessonId } from '@cuberush/api';
 import type { Move } from '@cuberush/cube-core';
 import { create } from 'zustand';
 
 const STORAGE_KEY = 'cuberush:learn';
 
-// Lesson progress is a per-browser convenience; storage may be missing or throw.
+// Progress is kept in this browser (and on the account when signed in, see net/profile.ts);
+// storage may be missing or throw.
 function loadDone(): string[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -21,6 +23,14 @@ function saveDone(done: string[]): void {
   }
 }
 
+/** Lessons finished in this browser that the account doesn't have yet (unknown ids skipped). */
+export function lessonsToUpload(local: readonly string[], server: readonly LessonId[]): LessonId[] {
+  return local.filter(
+    (id): id is LessonId =>
+      (LESSON_IDS as readonly string[]).includes(id) && !server.includes(id as LessonId),
+  );
+}
+
 interface TutorialState {
   lessonId: string | null;
   step: number;
@@ -34,6 +44,8 @@ interface TutorialState {
   setStep(step: number): void;
   setHint(hint: Move | null): void;
   complete(lessonId: string): void;
+  /** Adds lessons finished on another device. */
+  adopt(lessonIds: readonly string[]): void;
   close(): void;
 }
 
@@ -60,6 +72,14 @@ export const useTutorial = create<TutorialState>()((set, get) => ({
     const { done } = get();
     if (done.includes(lessonId)) return;
     const next = [...done, lessonId];
+    saveDone(next);
+    set({ done: next });
+  },
+
+  adopt(lessonIds) {
+    const { done } = get();
+    const next = [...done, ...lessonIds.filter((id) => !done.includes(id))];
+    if (next.length === done.length) return;
     saveDone(next);
     set({ done: next });
   },

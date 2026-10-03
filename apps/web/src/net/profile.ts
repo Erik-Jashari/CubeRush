@@ -1,6 +1,14 @@
-import { THEMES, type MeResponse, type PlayerDto, type SkinId, type ThemeId } from '@cuberush/api';
+import {
+  THEMES,
+  type LessonId,
+  type MeResponse,
+  type PlayerDto,
+  type SkinId,
+  type ThemeId,
+} from '@cuberush/api';
 import { create } from 'zustand';
 import { useSettings } from '../game/settings';
+import { lessonsToUpload, useTutorial } from '../game/tutorial';
 import { api, ApiError } from './api';
 
 const STORAGE_KEY = 'cuberush:player';
@@ -37,6 +45,10 @@ interface ProfileState {
   me: MeResponse | null;
   /** Claims a nickname. Throws ApiError (e.g. `nickname_taken`). */
   register(nickname: string): Promise<void>;
+  /** Signs this browser in to an existing player with their login code. Throws ApiError. */
+  login(code: string): Promise<void>;
+  /** Signs this browser out; the player can come back with their login code. */
+  logout(): Promise<void>;
   refresh(): Promise<void>;
   /** Forgets the saved token, e.g. after the server stops recognizing it. */
   forget(): void;
@@ -56,11 +68,27 @@ export const useProfile = create<ProfileState>()((set, get) => ({
     await get().refresh();
   },
 
+  async login(code) {
+    const { player, token } = await api.login(code);
+    save({ player, token });
+    set({ player, token, me: null });
+    await get().refresh();
+  },
+
+  async logout() {
+    const { token } = get();
+    // Signing out locally matters more than telling the server, which may be unreachable.
+    if (token) await api.logout(token).catch(() => undefined);
+    get().forget();
+  },
+
   async refresh() {
     const { token } = get();
     if (!token) return;
     try {
-      set({ me: await api.me(token) });
+      const me = await api.me(token);
+      set({ me });
+      await syncLessons(token, me.lessons);
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) get().forget();
       // Unreachable server: keep what we had and play offline.
@@ -72,6 +100,30 @@ export const useProfile = create<ProfileState>()((set, get) => ({
     set({ player: null, token: null, me: null });
   },
 }));
+
+async function uploadLessons(token: string, ids: LessonId[]): Promise<void> {
+  if (ids.length === 0) return;
+  const { lessons } = await api.saveLessons(token, ids);
+  const { me } = useProfile.getState();
+  if (me) useProfile.setState({ me: { ...me, lessons } });
+}
+
+/** Brings this browser's and the account's finished lessons together, both ways. */
+async function syncLessons(token: string, server: readonly LessonId[]): Promise<void> {
+  const tutorial = useTutorial.getState();
+  const upload = lessonsToUpload(tutorial.done, server);
+  tutorial.adopt(server);
+  await uploadLessons(token, upload);
+}
+
+// Finishing a lesson while signed in saves it to the account too. (Lessons adopted from the
+// account are already there, so they're filtered out.)
+useTutorial.subscribe((s, prev) => {
+  const { token, me } = useProfile.getState();
+  if (s.done === prev.done || !token || !me) return;
+  const added = s.done.filter((id) => !prev.done.includes(id));
+  void uploadLessons(token, lessonsToUpload(added, me.lessons)).catch(() => {});
+});
 
 /**
  * The skin to draw: the player's choice if the server says they own it, classic otherwise.

@@ -2,7 +2,9 @@ import type {
   AllTimeEntry,
   ChallengeResult,
   DailyEntry,
+  FastestEntry,
   GhostDto,
+  LessonId,
   Mode,
   PlayerDto,
   ShopKind,
@@ -11,6 +13,7 @@ import type {
   ThemeId,
   TimedMoveDto,
 } from '@cuberush/api';
+import { currentAverage } from '@cuberush/cube-core';
 import type { PlayerFacts } from './achievements.js';
 import { longestStreak } from './achievements.js';
 import type { Db } from './db.js';
@@ -54,6 +57,10 @@ export interface ChallengeRow {
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+/** Sessions record when they were last used, but at most this often, to avoid a write per request. */
+const SESSION_TOUCH_MS = 60 * 60 * 1000;
+/** Modes whose times are comparable on the Fastest board. */
+const TIMED_MODES = `('quick', 'daily')`;
 
 function previousDay(day: string): string {
   return new Date(Date.parse(`${day}T00:00:00Z`) - DAY_MS).toISOString().slice(0, 10);
@@ -74,10 +81,32 @@ export function currentStreak(days: ReadonlySet<string>, today: string): number 
 /** Data access. Every query lives here so routes never touch SQL. */
 export function createRepo(db: Db) {
   const statements = {
-    insertPlayer: db.prepare(
-      'INSERT INTO players (id, nickname, token_hash, created_at) VALUES (?, ?, ?, ?)',
+    insertPlayer: db.prepare('INSERT INTO players (id, nickname, created_at) VALUES (?, ?, ?)'),
+    insertSession: db.prepare(
+      'INSERT INTO sessions (token_hash, player_id, created_at, last_used_at) VALUES (?, ?, ?, ?)',
     ),
-    playerByToken: db.prepare('SELECT id, nickname FROM players WHERE token_hash = ?'),
+    playerByToken: db.prepare(`
+      SELECT p.id, p.nickname FROM sessions s JOIN players p ON p.id = s.player_id
+      WHERE s.token_hash = ?`),
+    touchSession: db.prepare(
+      'UPDATE sessions SET last_used_at = @now WHERE token_hash = @hash AND last_used_at < @before',
+    ),
+    deleteSession: db.prepare('DELETE FROM sessions WHERE token_hash = ?'),
+    deleteOtherSessions: db.prepare(
+      'DELETE FROM sessions WHERE player_id = @player AND token_hash <> @hash',
+    ),
+    otherSessions: db.prepare(
+      'SELECT COUNT(*) AS n FROM sessions WHERE player_id = @player AND token_hash <> @hash',
+    ),
+    setLoginHash: db.prepare('UPDATE players SET login_hash = ? WHERE id = ?'),
+    playerByLogin: db.prepare('SELECT id, nickname FROM players WHERE login_hash = ?'),
+    hasLogin: db.prepare('SELECT login_hash IS NOT NULL AS has FROM players WHERE id = ?'),
+    lessons: db.prepare(
+      'SELECT lesson_id FROM lesson_progress WHERE player_id = ? ORDER BY done_at, lesson_id',
+    ),
+    insertLesson: db.prepare(
+      'INSERT OR IGNORE INTO lesson_progress (player_id, lesson_id, done_at) VALUES (?, ?, ?)',
+    ),
     insertAttempt: db.prepare(
       `INSERT INTO attempts (id, player_id, mode, seed, ranked, challenge_code, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -135,11 +164,28 @@ export function createRepo(db: Db) {
                p.id AS player_id, p.nickname, SUM(s.points) AS points, COUNT(*) AS solves,
                MIN(CASE WHEN s.mode <> 'survival' THEN s.time_ms END) AS best_ms
         FROM solves s JOIN players p ON p.id = s.player_id
-        WHERE s.ranked = 1
+        WHERE s.ranked = 1 AND s.created_at >= @since
         GROUP BY p.id
       )
-      WHERE rank <= ? OR player_id = ?
+      WHERE rank <= @limit OR player_id = @player
       ORDER BY rank`),
+    // With MIN(), SQLite takes the bare columns (move_count, created_at) from the best row.
+    fastest: db.prepare(`
+      SELECT rank, nickname, best_ms, move_count, player_id FROM (
+        SELECT ROW_NUMBER() OVER (ORDER BY b.best_ms, b.set_at) AS rank,
+               p.nickname, b.best_ms, b.move_count, b.player_id
+        FROM (
+          SELECT player_id, MIN(time_ms) AS best_ms, move_count, created_at AS set_at
+          FROM solves WHERE ranked = 1 AND mode IN ${TIMED_MODES}
+          GROUP BY player_id
+        ) b JOIN players p ON p.id = b.player_id
+      )
+      WHERE rank <= @limit OR player_id = @player
+      ORDER BY rank`),
+    recentTimes: db.prepare(`
+      SELECT time_ms FROM solves WHERE player_id = ? AND ranked = 1 AND mode IN ${TIMED_MODES}
+      ORDER BY created_at DESC, id DESC
+      LIMIT ?`),
     spent: db.prepare('SELECT COALESCE(SUM(cost), 0) AS spent FROM unlocks WHERE player_id = ?'),
     owned: db.prepare(
       'SELECT item FROM unlocks WHERE player_id = ? AND kind = ? ORDER BY created_at',
@@ -173,14 +219,64 @@ export function createRepo(db: Db) {
   };
 
   return {
-    /** Throws a SqliteError with code SQLITE_CONSTRAINT_UNIQUE when the nickname is taken. */
-    createPlayer(id: string, nickname: string, tokenHash: string, now: number): void {
-      statements.insertPlayer.run(id, nickname, tokenHash, now);
+    /**
+     * Creates a player signed in on this device. Throws a SqliteError with code
+     * SQLITE_CONSTRAINT_UNIQUE when the nickname is taken.
+     */
+    createPlayer: db.transaction((id: string, nickname: string, tokenHash: string, now: number) => {
+      statements.insertPlayer.run(id, nickname, now);
+      statements.insertSession.run(tokenHash, id, now, now);
+    }),
+
+    /** The player a session token belongs to; also notes that the session is still in use. */
+    playerByTokenHash(tokenHash: string, now: number): PlayerDto | undefined {
+      const player = statements.playerByToken.get(tokenHash) as PlayerDto | undefined;
+      if (player) {
+        statements.touchSession.run({ now, hash: tokenHash, before: now - SESSION_TOUCH_MS });
+      }
+      return player;
     },
 
-    playerByTokenHash(tokenHash: string): PlayerDto | undefined {
-      return statements.playerByToken.get(tokenHash) as PlayerDto | undefined;
+    createSession(tokenHash: string, playerId: string, now: number): void {
+      statements.insertSession.run(tokenHash, playerId, now, now);
     },
+
+    deleteSession(tokenHash: string): void {
+      statements.deleteSession.run(tokenHash);
+    },
+
+    /** Signs out every device but the one holding `tokenHash`; returns how many were removed. */
+    deleteOtherSessions(playerId: string, tokenHash: string): number {
+      return statements.deleteOtherSessions.run({ player: playerId, hash: tokenHash }).changes;
+    },
+
+    otherSessions(playerId: string, tokenHash: string): number {
+      const row = statements.otherSessions.get({ player: playerId, hash: tokenHash });
+      return (row as { n: number }).n;
+    },
+
+    /** Replaces the player's login code; only its hash is kept. */
+    setLoginHash(playerId: string, loginHash: string): void {
+      statements.setLoginHash.run(loginHash, playerId);
+    },
+
+    playerByLoginHash(loginHash: string): PlayerDto | undefined {
+      return statements.playerByLogin.get(loginHash) as PlayerDto | undefined;
+    },
+
+    hasLoginCode(playerId: string): boolean {
+      return (statements.hasLogin.get(playerId) as { has: number }).has === 1;
+    },
+
+    lessons(playerId: string): LessonId[] {
+      const rows = statements.lessons.all(playerId) as { lesson_id: LessonId }[];
+      return rows.map((r) => r.lesson_id);
+    },
+
+    /** Records finished lessons; ones already recorded keep their first date. */
+    addLessons: db.transaction((playerId: string, ids: readonly LessonId[], now: number) => {
+      for (const id of ids) statements.insertLesson.run(playerId, id, now);
+    }),
 
     createAttempt(attempt: Omit<AttemptRow, 'submitted_at'>): void {
       const { id, player_id, mode, seed, ranked, challenge_code, created_at } = attempt;
@@ -368,8 +464,11 @@ export function createRepo(db: Db) {
       };
     },
 
-    /** Players ranked by total ranked points, plus the given player's own entry. */
-    allTimeLeaderboard(limit: number, playerId: string | null) {
+    /**
+     * Players ranked by points from ranked solves since `since` (epoch ms; 0 for all time), plus
+     * the given player's own entry.
+     */
+    pointsLeaderboard(limit: number, playerId: string | null, since = 0) {
       type Row = {
         rank: number;
         nickname: string;
@@ -378,7 +477,7 @@ export function createRepo(db: Db) {
         best_ms: number | null;
         player_id: string;
       };
-      const rows = statements.allTime.all(limit, playerId) as Row[];
+      const rows = statements.allTime.all({ limit, player: playerId, since }) as Row[];
       const toEntry = (r: Row): AllTimeEntry => ({
         rank: r.rank,
         nickname: r.nickname,
@@ -386,6 +485,33 @@ export function createRepo(db: Db) {
         solves: r.solves,
         bestMs: r.best_ms,
       });
+      const mine = rows.find((r) => r.player_id === playerId);
+      return {
+        entries: rows.filter((r) => r.rank <= limit).map(toEntry),
+        me: mine ? toEntry(mine) : null,
+      };
+    },
+
+    /** Players ranked by their best ranked Quick/Daily single, plus the given player's own entry. */
+    fastestLeaderboard(limit: number, playerId: string | null) {
+      type Row = {
+        rank: number;
+        nickname: string;
+        best_ms: number;
+        move_count: number;
+        player_id: string;
+      };
+      const rows = statements.fastest.all({ limit, player: playerId }) as Row[];
+      const toEntry = (r: Row): FastestEntry => {
+        const recent = statements.recentTimes.all(r.player_id, 5) as { time_ms: number }[];
+        return {
+          rank: r.rank,
+          nickname: r.nickname,
+          bestMs: r.best_ms,
+          moveCount: r.move_count,
+          ao5Ms: currentAverage(recent.map((t) => t.time_ms).reverse(), 5),
+        };
+      };
       const mine = rows.find((r) => r.player_id === playerId);
       return {
         entries: rows.filter((r) => r.rank <= limit).map(toEntry),

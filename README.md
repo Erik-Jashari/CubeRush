@@ -22,7 +22,12 @@ npm test           # run all tests
 npm run typecheck  # TypeScript project build
 npm run lint
 npm run format
+npm run backup     # copy the database to apps/server/data/backups (keeps the newest 14)
 ```
+
+Hosting it is covered step by step in [docs/DEPLOY.md](docs/DEPLOY.md) (Docker, a host with a volume, HTTPS,
+backups). CI runs every check on each push to `main`. Notes for working on the code with Claude are in
+[CLAUDE.md](CLAUDE.md).
 
 ### Server settings
 
@@ -53,6 +58,12 @@ API_PORT=3200 npm run dev -w @cuberush/web -- --port 5180     # web
 Retrying any scramble races a ghost of your last run on it. Camera: drag the background, or right-drag
 anywhere (even on the cube), to look around.
 
+**Keyboard:** the csTimer layout cubers know (I/K = R/R′, J/F = U/U′, H/G = F/F′, D/E = L/L′, S/L = D/D′,
+W/O = B/B′, ;/A = y/y′ …). Press **?** in a game for the full sheet; turn it off under Settings.
+
+The app installs to a phone or desktop home screen and works offline (guest play and lessons; solves made
+offline aren't saved).
+
 ## Learn to solve
 
 The **Learn** screen has two courses:
@@ -67,6 +78,13 @@ Step detection and practice cubes live in `packages/cube-core` (`stages.ts`, `pr
 lesson tests in `apps/web/src/ui/lessons.test.ts` follow each lesson's written instructions on 50 practice cubes and
 check they really finish the step, so the advice can't silently go wrong.
 
+Lesson 8, **Solve a whole cube**, deals a full scramble with a **Hint** button. `nextHint`
+(`packages/cube-core/src/hint.ts`) works out which step the cube is on and searches for the shortest run of
+that step's algorithms finishing one more piece, done from whichever side needs it so nobody has to rotate
+the cube. Its tests follow the hints from 40 scrambles (and odd orientations) to solved.
+
+Finished lessons are kept on the player's account when signed in, so they follow them to other devices.
+
 ## Progression
 
 - **Points** from ranked solves count toward the all-time leaderboard and can be spent in the **shop** on cube skins
@@ -74,6 +92,11 @@ check they really finish the step, so the advice can't silently go wrong.
   the leaderboard total. Ownership lives on the server, so editing local settings can pick an item but not unlock
   one.
 - **Profile**: personal best, Ao5/Ao12 (best and worst dropped), a progress chart, achievements, and skins.
+- **Leaderboards:** Today (the daily scramble), This week (points since Monday, UTC), Fastest (best ranked
+  single from Quick play and Daily, with the latest Ao5) and All time (total points).
+- **Accounts and devices:** the profile's Account tab makes a **login code** (`XXXX-XXXX-XXXX-XXXX`) to
+  sign in on another device or after clearing the browser; making a new one retires the old. It also shows
+  other signed-in devices and can sign them out. Only hashes of codes and session tokens are stored.
 - **Achievements** are worked out on the server from verified solves; a result card shows any a solve unlocked.
 - **Replay** any finished solve at 0.25×–2×. Turns click (or play notes in melody mode); solves end with a fanfare,
   confetti and a small shake. Sound, melody, ghost and inspection are under Settings on the home screen.

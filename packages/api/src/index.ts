@@ -21,6 +21,12 @@ export function utcDateKey(date = new Date()): string {
   return date.toISOString().slice(0, 10);
 }
 
+/** Monday 00:00 UTC of the week containing `date`, as `YYYY-MM-DD`; weekly boards reset then. */
+export function utcWeekStart(date = new Date()): string {
+  const daysSinceMonday = (date.getUTCDay() + 6) % 7;
+  return utcDateKey(new Date(date.getTime() - daysSinceMonday * 24 * 60 * 60 * 1000));
+}
+
 /** Everyone gets the same daily scramble because everyone uses the same seed. */
 export function dailySeed(date: string): string {
   return `daily-${date}`;
@@ -47,6 +53,25 @@ export interface RegisterResponse {
   token: string;
 }
 
+/** Login codes look like `ABCD-EFGH-JKLM-NPQR`: no 0/O or 1/I, so they're easy to copy by hand. */
+export const LOGIN_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+export const LOGIN_CODE_LENGTH = 16;
+
+/** Uppercases a typed login code and drops dashes and spaces. */
+export function normalizeLoginCode(code: string): string {
+  return code.toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+
+// POST /api/me/login-code (signed in): makes a new code; the previous one stops working.
+export interface LoginCodeResponse {
+  code: string;
+}
+
+// POST /api/login: signs this device in with a login code. Responds with a RegisterResponse.
+export interface LoginRequest {
+  code: string;
+}
+
 // GET /api/me
 export interface MeResponse {
   player: PlayerDto;
@@ -57,6 +82,12 @@ export interface MeResponse {
   /** Themes this player owns (always includes the free ones). */
   themes: ThemeId[];
   solves: number;
+  /** Tutorial lessons finished on any device. */
+  lessons: LessonId[];
+  /** Whether a login code exists, so the profile can say so. */
+  hasLoginCode: boolean;
+  /** Other devices signed in to this account. */
+  otherSessions: number;
   /** Consecutive UTC days, up to today or yesterday, with at least one ranked solve. */
   streak: number;
   daily: {
@@ -141,6 +172,29 @@ export interface AllTimeEntry {
 export interface AllTimeLeaderboard {
   entries: AllTimeEntry[];
   me: AllTimeEntry | null;
+}
+
+// GET /api/leaderboard/weekly: points from ranked solves since Monday 00:00 UTC.
+export interface WeeklyLeaderboard {
+  /** The Monday the week started, `YYYY-MM-DD`. */
+  weekOf: string;
+  entries: AllTimeEntry[];
+  me: AllTimeEntry | null;
+}
+
+// GET /api/leaderboard/fastest: each player's best ranked single from Quick play and Daily.
+export interface FastestEntry {
+  rank: number;
+  nickname: string;
+  bestMs: number;
+  /** Moves in that best solve. */
+  moveCount: number;
+  /** Average of the player's latest 5 ranked Quick/Daily solves; null with fewer than 5. */
+  ao5Ms: number | null;
+}
+export interface FastestLeaderboard {
+  entries: FastestEntry[];
+  me: FastestEntry | null;
 }
 
 // POST /api/challenges
@@ -281,4 +335,31 @@ export interface StatSolveDto {
 export interface StatsResponse {
   /** Up to the latest 500 solves (survival runs excluded), oldest first. */
   solves: StatSolveDto[];
+}
+
+// ---- Tutorial ----
+
+/** Every tutorial lesson, so the server can check progress it is sent. */
+export const LESSON_IDS = [
+  'faces',
+  'doubles',
+  'sexy',
+  'sune',
+  'cross',
+  'corners',
+  'middle',
+  'yellow-cross',
+  'yellow-edges',
+  'place-corners',
+  'twist-corners',
+  'full-solve',
+] as const;
+export type LessonId = (typeof LESSON_IDS)[number];
+
+// POST /api/me/lessons: records finished lessons (merging, never removing).
+export interface LessonsRequest {
+  ids: LessonId[];
+}
+export interface LessonsResponse {
+  lessons: LessonId[];
 }

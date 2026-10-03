@@ -12,3 +12,4 @@ export * from './stats.js';
 export * from './stages.js';
 export * from './algorithms.js';
 export * from './practice.js';
+export * from './hint.js';

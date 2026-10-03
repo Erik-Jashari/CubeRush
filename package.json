@@ -10,11 +10,13 @@
     "dev": "concurrently -n server,web -c blue,magenta \"npm run dev -w @cuberush/server\" \"npm run dev -w @cuberush/web\"",
     "start": "npm run start -w @cuberush/server",
     "build": "npm run build -w @cuberush/web",
+    "backup": "npm run backup -w @cuberush/server",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc -b",
     "lint": "eslint .",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "devDependencies": {
     "@eslint/js": "^9.0.0",

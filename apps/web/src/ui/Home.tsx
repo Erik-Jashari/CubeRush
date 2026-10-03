@@ -1,4 +1,11 @@
-import { NICKNAME_PATTERN, NICKNAME_RULES, THEMES, utcDateKey } from '@cuberush/api';
+import {
+  LOGIN_CODE_LENGTH,
+  NICKNAME_PATTERN,
+  NICKNAME_RULES,
+  normalizeLoginCode,
+  THEMES,
+  utcDateKey,
+} from '@cuberush/api';
 import { useEffect, useState, type FormEvent } from 'react';
 import { useSettings } from '../game/settings';
 import { useGame } from '../game/store';
@@ -15,10 +22,68 @@ const SETTINGS = [
   { key: 'ghost', label: 'Race a ghost replay when one is available' },
   { key: 'sound', label: 'Sound effects' },
   { key: 'melody', label: 'Melody mode: every face plays a note' },
+  { key: 'keyboard', label: 'Keyboard turns (press ? during a solve to see the keys)' },
 ] as const;
+
+/** Signs in to an existing player on this device. */
+function LoginCodeForm({ onCancel }: { onCancel: () => void }) {
+  const login = useProfile((s) => s.login);
+  const [code, setCode] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (normalizeLoginCode(code).length !== LOGIN_CODE_LENGTH) {
+      setError(`Login codes have ${LOGIN_CODE_LENGTH} letters and numbers.`);
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      await login(code);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Something went wrong.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <form className="join" onSubmit={submit} noValidate>
+      <label htmlFor="login-code">Enter the login code from your profile on another device</label>
+      <div className="join__row">
+        <input
+          id="login-code"
+          className="input input--code"
+          value={code}
+          onChange={(e) => setCode(e.target.value)}
+          placeholder="XXXX-XXXX-XXXX-XXXX"
+          autoComplete="one-time-code"
+          autoCapitalize="characters"
+          spellCheck={false}
+          maxLength={24}
+          aria-invalid={error !== null}
+          aria-describedby="login-help"
+        />
+        <button className="btn btn--primary" disabled={busy}>
+          {busy ? 'Signing in…' : 'Sign in'}
+        </button>
+      </div>
+      <p id="login-help" className={error ? 'join__error' : 'join__help'} role="status">
+        {error ?? (
+          <button type="button" className="link" onClick={onCancel}>
+            Pick a new nickname instead
+          </button>
+        )}
+      </p>
+    </form>
+  );
+}
 
 function NicknameForm() {
   const register = useProfile((s) => s.register);
+  const [withCode, setWithCode] = useState(false);
   const [nickname, setNickname] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -41,6 +106,7 @@ function NicknameForm() {
     }
   };
 
+  if (withCode) return <LoginCodeForm onCancel={() => setWithCode(false)} />;
   return (
     <form className="join" onSubmit={submit} noValidate>
       <label htmlFor="nickname">Pick a nickname to save points and join the leaderboard</label>
@@ -61,7 +127,10 @@ function NicknameForm() {
         </button>
       </div>
       <p id="nickname-help" className={error ? 'join__error' : 'join__help'} role="status">
-        {error ?? 'Or just play as a guest; guest solves are not saved.'}
+        {error ?? 'Or just play as a guest; guest solves are not saved.'}{' '}
+        <button type="button" className="link" onClick={() => setWithCode(true)}>
+          Have a login code?
+        </button>
       </p>
     </form>
   );

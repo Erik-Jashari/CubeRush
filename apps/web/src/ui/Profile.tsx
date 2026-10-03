@@ -231,7 +231,138 @@ function ShopTab() {
   );
 }
 
-const TABS = { stats: 'Stats', achievements: 'Achievements', shop: 'Shop' } as const;
+/** Login code for other devices, signed-in devices, and signing out. */
+function AccountTab() {
+  const token = useProfile((s) => s.token)!;
+  const me = useProfile((s) => s.me);
+  const refresh = useProfile((s) => s.refresh);
+  const logout = useProfile((s) => s.logout);
+  const goHome = useGame((s) => s.goHome);
+  const [code, setCode] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [confirmSignOut, setConfirmSignOut] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  if (!me) return <p className="board__note">Loading…</p>;
+
+  const run = async (action: () => Promise<void>) => {
+    setBusy(true);
+    setMessage(null);
+    try {
+      await action();
+    } catch (error) {
+      setMessage(error instanceof ApiError ? error.message : 'Something went wrong.');
+    } finally {
+      setBusy(false);
+    }
+  };
+  const makeCode = () =>
+    run(async () => {
+      setCode((await api.loginCode(token)).code);
+      setCopied(false);
+      await refresh();
+    });
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(code!);
+      setCopied(true);
+    } catch {
+      setMessage('Couldn’t copy; select the code and copy it by hand.');
+    }
+  };
+  const signOutOthers = () =>
+    run(async () => {
+      await api.logoutOthers(token);
+      await refresh();
+    });
+  const signOut = () =>
+    run(async () => {
+      await logout();
+      goHome();
+    });
+
+  return (
+    <div className="account">
+      {message && <p className="board__note board__note--bad">{message}</p>}
+
+      <section>
+        <h3 className="shop__title">Login code</h3>
+        <p className="account__text">
+          Your account lives in this browser. A login code lets you sign in on another device, or
+          come back after clearing your browser.
+        </p>
+        {code ? (
+          <>
+            <p className="account__code">
+              <code>{code}</code>
+              <button className="btn btn--small" onClick={() => void copy()}>
+                {copied ? 'Copied' : 'Copy'}
+              </button>
+            </p>
+            <p className="account__text account__text--warn">
+              Save it somewhere safe, like a password manager. You won’t see it again, and anyone
+              with it can play as you.
+            </p>
+          </>
+        ) : (
+          <>
+            {me.hasLoginCode && (
+              <p className="account__text">
+                You already made a code. Lost it? A new one replaces it.
+              </p>
+            )}
+            <button className="btn" disabled={busy} onClick={() => void makeCode()}>
+              {me.hasLoginCode ? 'Make a new login code' : 'Make a login code'}
+            </button>
+          </>
+        )}
+      </section>
+
+      <section>
+        <h3 className="shop__title">Devices</h3>
+        <p className="account__text">
+          {me.otherSessions === 0
+            ? 'Only this browser is signed in.'
+            : `Signed in here and on ${me.otherSessions} other ${me.otherSessions === 1 ? 'device' : 'devices'}.`}
+        </p>
+        <div className="account__actions">
+          {me.otherSessions > 0 && (
+            <button className="btn" disabled={busy} onClick={() => void signOutOthers()}>
+              Sign out other devices
+            </button>
+          )}
+          {confirmSignOut ? (
+            <>
+              <span className="account__text account__text--warn">
+                {me.hasLoginCode
+                  ? 'You’ll need your login code to come back.'
+                  : `Without a login code you can’t get back to ${me.player.nickname}.`}
+              </span>
+              <button className="btn" disabled={busy} onClick={() => void signOut()}>
+                Sign out anyway
+              </button>
+              <button className="btn btn--ghost" onClick={() => setConfirmSignOut(false)}>
+                Cancel
+              </button>
+            </>
+          ) : (
+            <button className="btn btn--ghost" onClick={() => setConfirmSignOut(true)}>
+              Sign out of this browser
+            </button>
+          )}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+const TABS = {
+  stats: 'Stats',
+  achievements: 'Achievements',
+  shop: 'Shop',
+  account: 'Account',
+} as const;
 
 export function Profile() {
   const [tab, setTab] = useState<keyof typeof TABS>('stats');
@@ -264,6 +395,7 @@ export function Profile() {
           {tab === 'stats' && <StatsTab />}
           {tab === 'achievements' && <AchievementsTab />}
           {tab === 'shop' && <ShopTab />}
+          {tab === 'account' && <AccountTab />}
         </div>
       </div>
     </main>

@@ -1,11 +1,4 @@
-import {
-  cubieColors,
-  FACE_NORMALS,
-  isSolved,
-  type CubeState,
-  type Cubie,
-  type Face,
-} from './cube.js';
+import { cubieColors, FACE_NORMALS, type CubeState, type Cubie, type Face } from './cube.js';
 import { mulMatVec, vecEquals, type Vec3 } from './math.js';
 
 /**
@@ -56,7 +49,21 @@ function centerNormals(all: readonly Piece[]): Map<Face, Vec3> {
   return centers;
 }
 
+export interface StageProgress {
+  /** Last stage completed, as `stageReached` returns it. */
+  stage: Stage | 0;
+  /** Colors of each piece of the next stage that is already done; empty once solved. */
+  done: Face[][];
+  /** Colors of each piece of the next stage still to do; empty once solved. */
+  todo: Face[][];
+}
+
 export function stageReached(state: CubeState): Stage | 0 {
+  return stageProgress(state).stage;
+}
+
+/** How far through the method the cube is, down to the pieces of the step being worked on. */
+export function stageProgress(state: CubeState): StageProgress {
   const all = pieces(state);
   const centers = centerNormals(all);
   const solved = (p: Piece) => p.colors.every((c) => vecEquals(p.normals.get(c)!, centers.get(c)!));
@@ -82,16 +89,28 @@ export function stageReached(state: CubeState): Stage | 0 {
   const yellowCorners = corners.filter((p) => has(p, YELLOW));
   const yellowUp = centers.get(YELLOW)!;
 
-  const checks: (() => boolean)[] = [
-    () => whiteEdges.every(solved),
-    () => whiteCorners.every(solved),
-    () => middleEdges.every(solved),
-    () => yellowEdges.every((p) => vecEquals(p.normals.get(YELLOW)!, yellowUp)),
-    () => yellowEdges.every(solved),
-    () => yellowCorners.every(placed),
-    () => isSolved(state),
+  // Each stage: the pieces it is about and what "done" means for one of them. With stages 1–6
+  // done, the yellow corners being solved means the whole cube is.
+  const checks: [Piece[], (p: Piece) => boolean][] = [
+    [whiteEdges, solved],
+    [whiteCorners, solved],
+    [middleEdges, solved],
+    [yellowEdges, (p) => vecEquals(p.normals.get(YELLOW)!, yellowUp)],
+    [yellowEdges, solved],
+    [yellowCorners, placed],
+    [yellowCorners, solved],
   ];
-  let reached = 0;
-  while (reached < checks.length && checks[reached]!()) reached++;
-  return reached as Stage | 0;
+  for (let i = 0; i < checks.length; i++) {
+    const [group, ok] = checks[i]!;
+    const todo = group.filter((p) => !ok(p));
+    if (todo.length > 0) {
+      const done = group.filter(ok);
+      return {
+        stage: i as Stage | 0,
+        done: done.map((p) => p.colors),
+        todo: todo.map((p) => p.colors),
+      };
+    }
+  }
+  return { stage: 7, done: [], todo: [] };
 }

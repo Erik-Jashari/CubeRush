@@ -45,7 +45,8 @@ export function useTestServer() {
       headers: token ? { authorization: `Bearer ${token}` } : {},
       ...(body ? { payload: body } : {}),
     });
-    return { status: res.statusCode, body: res.json() as T };
+    // 204 responses have no body.
+    return { status: res.statusCode, body: (res.body ? res.json() : null) as T };
   };
 
   return {

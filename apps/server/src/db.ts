@@ -1,8 +1,16 @@
 import Database from 'better-sqlite3';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 export type Db = Database.Database;
+
+/** Where the database file lives: `DATABASE_PATH`, or `apps/server/data/cuberush.db`. */
+export function databasePath(): string {
+  return (
+    process.env.DATABASE_PATH ?? fileURLToPath(new URL('../data/cuberush.db', import.meta.url))
+  );
+}
 
 /** Each entry upgrades the schema by one version; never edit one that has shipped. */
 export const MIGRATIONS: readonly string[] = [
@@ -96,6 +104,38 @@ export const MIGRATIONS: readonly string[] = [
     SELECT player_id, 'skin', skin, cost, created_at FROM unlocks;
   DROP TABLE unlocks;
   ALTER TABLE unlocks_v2 RENAME TO unlocks;
+  `,
+  // Part 8: several devices per player (one session each), login codes to add a device, lesson
+  // progress kept on the account, and an index for the weekly leaderboard.
+  `
+  CREATE TABLE sessions (
+    token_hash    TEXT PRIMARY KEY,
+    player_id     TEXT NOT NULL REFERENCES players(id),
+    created_at    INTEGER NOT NULL,
+    last_used_at  INTEGER NOT NULL
+  );
+  CREATE INDEX sessions_by_player ON sessions (player_id);
+  INSERT INTO sessions (token_hash, player_id, created_at, last_used_at)
+    SELECT token_hash, id, created_at, created_at FROM players;
+
+  CREATE TABLE players_v2 (
+    id          TEXT PRIMARY KEY,
+    nickname    TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    login_hash  TEXT UNIQUE,          -- hash of the player's current login code, if they made one
+    created_at  INTEGER NOT NULL
+  );
+  INSERT INTO players_v2 (id, nickname, created_at) SELECT id, nickname, created_at FROM players;
+  DROP TABLE players;
+  ALTER TABLE players_v2 RENAME TO players;
+
+  CREATE TABLE lesson_progress (
+    player_id  TEXT NOT NULL REFERENCES players(id),
+    lesson_id  TEXT NOT NULL,
+    done_at    INTEGER NOT NULL,
+    PRIMARY KEY (player_id, lesson_id)
+  );
+
+  CREATE INDEX solves_by_time ON solves (ranked, created_at);
   `,
 ];
 

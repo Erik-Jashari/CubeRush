@@ -4,6 +4,9 @@ import {
   type AllTimeLeaderboard,
   type DailyEntry,
   type DailyLeaderboard,
+  type FastestEntry,
+  type FastestLeaderboard,
+  type WeeklyLeaderboard,
 } from '@cuberush/api';
 import { useState, type ReactNode } from 'react';
 import { useGame } from '../game/store';
@@ -84,6 +87,12 @@ const ALL_TIME_COLUMNS: Column<AllTimeEntry>[] = [
   { label: 'Best', cell: (e) => (e.bestMs === null ? '—' : formatTime(e.bestMs)), numeric: true },
 ];
 
+const FASTEST_COLUMNS: Column<FastestEntry>[] = [
+  { label: 'Best', cell: (e) => formatTime(e.bestMs), numeric: true },
+  { label: 'Moves', cell: (e) => e.moveCount, numeric: true },
+  { label: 'Ao5', cell: (e) => (e.ao5Ms === null ? '—' : formatTime(e.ao5Ms)), numeric: true },
+];
+
 function DailyBoard() {
   const { load } = useLoad<DailyLeaderboard>(api.dailyLeaderboard);
   const date = load.state === 'ready' ? load.data.date : utcDateKey();
@@ -105,8 +114,39 @@ function AllTimeBoard() {
   );
 }
 
+function WeeklyBoard() {
+  const { load } = useLoad<WeeklyLeaderboard>(api.weeklyLeaderboard);
+  const since = load.state === 'ready' ? ` since Monday ${load.data.weekOf}` : '';
+  return (
+    <>
+      <p className="board__caption">Points this week{since} (UTC) · resets every Monday</p>
+      <Board load={load} columns={ALL_TIME_COLUMNS} />
+    </>
+  );
+}
+
+function FastestBoard() {
+  const { load } = useLoad<FastestLeaderboard>(api.fastestLeaderboard);
+  return (
+    <>
+      <p className="board__caption">
+        Best ranked single from Quick play and Daily · Ao5 is the latest five
+      </p>
+      <Board load={load} columns={FASTEST_COLUMNS} />
+    </>
+  );
+}
+
+const TABS = {
+  daily: { label: 'Today', board: DailyBoard },
+  weekly: { label: 'This week', board: WeeklyBoard },
+  fastest: { label: 'Fastest', board: FastestBoard },
+  'all-time': { label: 'All time', board: AllTimeBoard },
+} as const;
+
 export function Leaderboard() {
-  const [tab, setTab] = useState<'daily' | 'all-time'>('daily');
+  const [tab, setTab] = useState<keyof typeof TABS>('daily');
+  const Current = TABS[tab].board;
   const goHome = useGame((s) => s.goHome);
 
   return (
@@ -119,7 +159,7 @@ export function Leaderboard() {
           <h2>Leaderboard</h2>
         </div>
         <div className="tabs" role="tablist">
-          {(['daily', 'all-time'] as const).map((t) => (
+          {(Object.keys(TABS) as (keyof typeof TABS)[]).map((t) => (
             <button
               key={t}
               role="tab"
@@ -127,12 +167,12 @@ export function Leaderboard() {
               className={`tabs__tab${tab === t ? ' tabs__tab--on' : ''}`}
               onClick={() => setTab(t)}
             >
-              {t === 'daily' ? 'Today' : 'All time'}
+              {TABS[t].label}
             </button>
           ))}
         </div>
         <div className="board-panel__body" role="tabpanel">
-          {tab === 'daily' ? <DailyBoard /> : <AllTimeBoard />}
+          <Current />
         </div>
       </div>
     </main>

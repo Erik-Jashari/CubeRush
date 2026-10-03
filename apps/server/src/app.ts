@@ -1,19 +1,29 @@
 import {
   CHALLENGE_CODE_PATTERN,
   dailySeed,
+  LESSON_IDS,
+  LOGIN_CODE_ALPHABET,
+  LOGIN_CODE_LENGTH,
   MAX_SOLVE_MOVES,
   NICKNAME_PATTERN,
   NICKNAME_RULES,
+  normalizeLoginCode,
   SHOP,
   THEMES,
   utcDateKey,
+  utcWeekStart,
   type AllTimeLeaderboard,
   type AttemptDto,
   type ChallengeDto,
   type CreateChallengeRequest,
   type CreateAttemptRequest,
   type DailyLeaderboard,
+  type FastestLeaderboard,
   type GhostDto,
+  type LessonsRequest,
+  type LessonsResponse,
+  type LoginCodeResponse,
+  type LoginRequest,
   type MeResponse,
   type PlayerDto,
   type RegisterRequest,
@@ -25,6 +35,7 @@ import {
   type UnlockRequest,
   type UnlockResponse,
   type WalletDto,
+  type WeeklyLeaderboard,
 } from '@cuberush/api';
 import {
   computePoints,
@@ -45,6 +56,8 @@ import { createRepo, currentStreak, streakLength } from './repo.js';
 declare module 'fastify' {
   interface FastifyRequest {
     player: PlayerDto | null;
+    /** Hash of the session token the request came with, once `requirePlayer` accepted it. */
+    tokenHash: string | null;
   }
 }
 
@@ -70,6 +83,15 @@ const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789
 /** Random 8-character code from an alphabet without look-alikes (0/O, 1/l/I). */
 function challengeCode(): string {
   return Array.from(randomBytes(8), (b) => CODE_ALPHABET[b % CODE_ALPHABET.length]).join('');
+}
+
+/** A fresh login code like `ABCD-EFGH-JKLM-NPQR` (80 random bits: 32 letters, 16 of them). */
+function loginCode(): string {
+  const chars = Array.from(
+    randomBytes(LOGIN_CODE_LENGTH),
+    (b) => LOGIN_CODE_ALPHABET[b % LOGIN_CODE_ALPHABET.length],
+  ).join('');
+  return chars.match(/.{4}/g)!.join('-');
 }
 
 function randomSeed(prefix: string): string {
@@ -108,9 +130,20 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
   }
 
   app.decorateRequest('player', null);
-  const identify = (request: FastifyRequest): PlayerDto | null => {
+  app.decorateRequest('tokenHash', null);
+  const bearerHash = (request: FastifyRequest): string | null => {
     const token = /^Bearer (\S+)$/.exec(request.headers.authorization ?? '')?.[1];
-    return token ? (repo.playerByTokenHash(hashToken(token)) ?? null) : null;
+    return token ? hashToken(token) : null;
+  };
+  const identify = (request: FastifyRequest): PlayerDto | null => {
+    const hash = bearerHash(request);
+    return hash ? (repo.playerByTokenHash(hash, now()) ?? null) : null;
+  };
+  /** Starts a session for `player` on the calling device. */
+  const signIn = (player: PlayerDto): RegisterResponse => {
+    const token = randomBytes(32).toString('base64url');
+    repo.createSession(hashToken(token), player.id, now());
+    return { player, token };
   };
   const wallet = (playerId: string): WalletDto => {
     const earned = repo.totals(playerId).points;
@@ -120,6 +153,7 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
   const requirePlayer = async (request: FastifyRequest, reply: FastifyReply) => {
     request.player = identify(request);
     if (!request.player) return fail(reply, 401, 'unauthorized', 'Pick a nickname first.');
+    request.tokenHash = bearerHash(request);
   };
 
   await app.register(
@@ -159,6 +193,74 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
         },
       );
 
+      api.post<{ Body: LoginRequest }>(
+        '/login',
+        {
+          // Codes have 80 random bits, so guessing is hopeless; the limit just keeps it that way.
+          config: { rateLimit: { max: 10, timeWindow: '1 hour' } },
+          schema: {
+            body: {
+              type: 'object',
+              required: ['code'],
+              additionalProperties: false,
+              properties: { code: { type: 'string', maxLength: 40 } },
+            },
+          },
+        },
+        async (request, reply) => {
+          const code = normalizeLoginCode(request.body.code);
+          const player =
+            code.length === LOGIN_CODE_LENGTH && repo.playerByLoginHash(hashToken(code));
+          if (!player) {
+            return fail(reply, 401, 'bad_code', 'That login code doesn’t match any player.');
+          }
+          return reply.code(201).send(signIn(player));
+        },
+      );
+
+      api.post('/me/login-code', { preHandler: requirePlayer }, async (request, reply) => {
+        const code = loginCode();
+        repo.setLoginHash(request.player!.id, hashToken(normalizeLoginCode(code)));
+        const body: LoginCodeResponse = { code };
+        return reply.code(201).send(body);
+      });
+
+      api.post('/me/logout', { preHandler: requirePlayer }, async (request, reply) => {
+        repo.deleteSession(request.tokenHash!);
+        return reply.code(204).send();
+      });
+
+      api.post('/me/logout-others', { preHandler: requirePlayer }, async (request) => ({
+        signedOut: repo.deleteOtherSessions(request.player!.id, request.tokenHash!),
+      }));
+
+      api.post<{ Body: LessonsRequest }>(
+        '/me/lessons',
+        {
+          preHandler: requirePlayer,
+          schema: {
+            body: {
+              type: 'object',
+              required: ['ids'],
+              additionalProperties: false,
+              properties: {
+                ids: {
+                  type: 'array',
+                  maxItems: LESSON_IDS.length,
+                  items: { type: 'string', enum: [...LESSON_IDS] },
+                },
+              },
+            },
+          },
+        },
+        async (request) => {
+          const player = request.player!;
+          repo.addLessons(player.id, request.body.ids, now());
+          const body: LessonsResponse = { lessons: repo.lessons(player.id) };
+          return body;
+        },
+      );
+
       api.get('/me', { preHandler: requirePlayer }, async (request) => {
         const player = request.player!;
         const date = today();
@@ -170,6 +272,9 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
           skins: repo.skins(player.id),
           themes: repo.themes(player.id, FREE_THEMES),
           solves: totals.solves,
+          lessons: repo.lessons(player.id),
+          hasLoginCode: repo.hasLoginCode(player.id),
+          otherSessions: repo.otherSessions(player.id, request.tokenHash!),
           streak: currentStreak(repo.rankedDays(player.id), date),
           daily: {
             date,
@@ -538,7 +643,44 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
         },
         async (request) => {
           const player = identify(request);
-          const body: AllTimeLeaderboard = repo.allTimeLeaderboard(
+          const body: AllTimeLeaderboard = repo.pointsLeaderboard(
+            request.query.limit,
+            player?.id ?? null,
+          );
+          return body;
+        },
+      );
+
+      api.get<{ Querystring: { limit: number } }>(
+        '/leaderboard/weekly',
+        {
+          schema: {
+            querystring: { type: 'object', properties: { limit: limitQuery } },
+          },
+        },
+        async (request) => {
+          const player = identify(request);
+          const weekOf = utcWeekStart(new Date(now()));
+          const board = repo.pointsLeaderboard(
+            request.query.limit,
+            player?.id ?? null,
+            Date.parse(`${weekOf}T00:00:00Z`),
+          );
+          const body: WeeklyLeaderboard = { weekOf, ...board };
+          return body;
+        },
+      );
+
+      api.get<{ Querystring: { limit: number } }>(
+        '/leaderboard/fastest',
+        {
+          schema: {
+            querystring: { type: 'object', properties: { limit: limitQuery } },
+          },
+        },
+        async (request) => {
+          const player = identify(request);
+          const body: FastestLeaderboard = repo.fastestLeaderboard(
             request.query.limit,
             player?.id ?? null,
           );

@@ -3,7 +3,9 @@ import {
   applyMoves,
   createSolvedCube,
   formatMove,
+  formatMoves,
   invertMove,
+  nextHint,
   parseMove,
   parseMoves,
   practiceCube,
@@ -14,8 +16,11 @@ import {
 } from '@cuberush/cube-core';
 import { useEffect, useState } from 'react';
 import { drillDone, drillHint, drillStep, startDrill, type Drill } from '../game/drill';
+import { keyFor, useKeyboardTurns } from '../game/keyboard';
+import { useSettings } from '../game/settings';
 import { useGame } from '../game/store';
 import { useTutorial } from '../game/tutorial';
+import { KeyboardHelp } from './KeyboardHelp';
 import { CASES, LESSONS, type CaseId, type Lesson as LessonData } from './lessons';
 
 /** The method is taught with white on the bottom. */
@@ -32,6 +37,7 @@ export function openLesson(lesson: LessonData) {
 }
 
 function MoveChips({ drill }: { drill: Drill }) {
+  const keyboard = useSettings((s) => s.keyboard);
   return (
     <ol className="chips" aria-label="Moves to make">
       {drill.expected.map((move, i) => (
@@ -43,6 +49,11 @@ function MoveChips({ drill }: { drill: Drill }) {
           aria-current={i === drill.index ? 'step' : undefined}
         >
           {formatMove(move)}
+          {keyboard && i === drill.index && keyFor(move) && (
+            <kbd className="chip__key" title="Keyboard key">
+              {keyFor(move)}
+            </kbd>
+          )}
         </li>
       ))}
     </ol>
@@ -107,14 +118,22 @@ function LessonRunner({ lesson, stepIndex }: { lesson: LessonData; stepIndex: nu
   const [round, setRound] = useState(0);
   /** Hides the explanation so the cube has room while practicing. */
   const [collapsed, setCollapsed] = useState(false);
+  /** What the current hint's moves are for (solve steps). */
+  const [hintText, setHintText] = useState<string | null>(null);
   const canUndo = useGame((s) => s.undoStack.length > 0);
+  const solving = step.kind === 'solve';
+  const reached = useGame((s): number => (solving ? stageReached(s.cube) : 0));
   const { setStep, complete, close, setHint } = useTutorial.getState();
+  useKeyboardTurns();
 
   // Set up the cube for this step.
   useEffect(() => {
     setPracticeDone(false);
-    if (step.kind === 'practice') {
-      startCube(practiceCube(step.stage, `${Date.now()}:${round}`).state);
+    setHintText(null);
+    if (step.kind === 'practice' || step.kind === 'solve') {
+      // A whole cube is a stage-1 practice cube: a full scramble held white side down.
+      const stage = step.kind === 'practice' ? step.stage : 1;
+      startCube(practiceCube(stage, `${Date.now()}:${round}`).state);
       setDrill(null);
     } else if (step.kind === 'moves') {
       if (step.fresh) startCube();
@@ -131,7 +150,8 @@ function LessonRunner({ lesson, stepIndex }: { lesson: LessonData; stepIndex: nu
         if (s.mode !== 'tutorial' || s.log.length <= prev.log.length) return;
         const moves = s.log.slice(prev.log.length).map((entry) => parseMove(entry.m));
         setDrill((d) => d && moves.reduce(drillStep, d));
-        if (step.kind === 'practice' && stageReached(s.cube) >= step.stage) setPracticeDone(true);
+        const goal = step.kind === 'practice' ? step.stage : step.kind === 'solve' ? 7 : null;
+        if (goal !== null && stageReached(s.cube) >= goal) setPracticeDone(true);
       }),
     [step],
   );
@@ -140,11 +160,11 @@ function LessonRunner({ lesson, stepIndex }: { lesson: LessonData; stepIndex: nu
   useEffect(() => setHint(drill && !drillDone(drill) ? drillHint(drill) : null), [drill, setHint]);
   useEffect(() => () => setHint(null), [setHint]);
 
-  const guiding = step.kind === 'practice' && drill !== null;
+  const guiding = (step.kind === 'practice' || solving) && drill !== null;
   const done =
     step.kind === 'read' ||
     (step.kind === 'moves' && drill !== null && drillDone(drill)) ||
-    (step.kind === 'practice' && practiceDone);
+    ((step.kind === 'practice' || solving) && practiceDone);
   const last = stepIndex === lesson.steps.length - 1;
   const course = LESSONS.filter((l) => l.course === lesson.course);
   const nextLesson = course[course.indexOf(lesson) + 1];
@@ -155,8 +175,22 @@ function LessonRunner({ lesson, stepIndex }: { lesson: LessonData; stepIndex: nu
 
   // A finished guide clears itself so the arrow goes away.
   useEffect(() => {
-    if (guiding && drill && drillDone(drill)) setDrill(null);
+    if (guiding && drill && drillDone(drill)) {
+      setDrill(null);
+      setHintText(null);
+    }
   }, [guiding, drill]);
+
+  const showHint = () => {
+    const hint = nextHint(useGame.getState().cube);
+    if (!hint) return;
+    setHintText(hint.text);
+    setDrill(startDrill(formatMoves(hint.moves)));
+  };
+  const stopGuide = () => {
+    setDrill(null);
+    setHintText(null);
+  };
 
   const leave = () => {
     close();
@@ -210,11 +244,22 @@ function LessonRunner({ lesson, stepIndex }: { lesson: LessonData; stepIndex: nu
               />
             ))}
 
+          {solving && !practiceDone && (
+            <p className="lesson__progress" role="status">
+              You’re on step {reached + 1} of 7: <strong>{STAGES[reached]}</strong>
+            </p>
+          )}
+          {hintText && <p className="lesson__hint">{hintText}</p>}
           {drill && !drillDone(drill) && (
             <>
               <MoveChips drill={drill} />
               <Feedback drill={drill} />
             </>
+          )}
+          {solving && practiceDone && (
+            <p className="lesson__win" role="status">
+              Solved! You just did a whole Rubik’s cube.
+            </p>
           )}
           {step.kind === 'practice' && practiceDone && (
             <p className="lesson__win" role="status">
@@ -238,12 +283,18 @@ function LessonRunner({ lesson, stepIndex }: { lesson: LessonData; stepIndex: nu
                 Undo
               </button>
             )}
+            {step.kind !== 'read' && <KeyboardHelp />}
+            {solving && !guiding && !practiceDone && (
+              <button className="btn btn--highlight" onClick={showHint}>
+                Hint
+              </button>
+            )}
             {guiding && (
-              <button className="btn" onClick={() => setDrill(null)}>
+              <button className="btn" onClick={stopGuide}>
                 Stop guide
               </button>
             )}
-            {step.kind === 'practice' && (
+            {(step.kind === 'practice' || solving) && (
               <button className="btn" onClick={() => setRound((r) => r + 1)}>
                 {practiceDone ? 'Another cube' : 'New cube'}
               </button>

@@ -1,3 +1,4 @@
+import type { LessonId } from '@cuberush/api';
 import type { AlgorithmId, Stage } from '@cuberush/cube-core';
 
 /** Top-face patterns of the yellow-cross step, as 3×3 grids (true = yellow). */
@@ -38,10 +39,13 @@ export type LessonStep =
       stage: Stage;
       algorithms: AlgorithmId[];
       cases?: CaseId[];
-    };
+    }
+  /** A whole scrambled cube, with hints from wherever the player gets stuck. */
+  | { kind: 'solve'; title: string; body: string[] };
 
 export interface Lesson {
-  id: string;
+  /** Also listed in LESSON_IDS (@cuberush/api) so the server accepts progress for it. */
+  id: LessonId;
   course: CourseId;
   title: string;
   summary: string;
@@ -313,6 +317,23 @@ export const LESSONS: Lesson[] = [
         ],
         stage: 7,
         algorithms: ['cornerTwist'],
+      },
+    ],
+  },
+  {
+    id: 'full-solve',
+    course: 'method',
+    title: '8. Solve a whole cube',
+    summary: 'All seven steps on a real scramble, with hints when you are stuck.',
+    view: 'top',
+    steps: [
+      {
+        kind: 'solve',
+        title: 'Your first full solve',
+        body: [
+          HOLD,
+          'Go through the seven steps in order. Stuck? Press Hint: it looks at your cube, works out which step you are on and shows the next few moves.',
+        ],
       },
     ],
   },

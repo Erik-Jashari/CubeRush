@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "tsx watch src/main.ts",
     "start": "tsx src/main.ts",
-    "test": "vitest run"
+    "test": "vitest run",
+    "backup": "tsx src/backup.ts"
   },
   "dependencies": {
     "@cuberush/cube-core": "*",
