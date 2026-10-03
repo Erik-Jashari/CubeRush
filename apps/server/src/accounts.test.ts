@@ -105,6 +105,16 @@ describe('login codes and devices', () => {
   });
 });
 
+describe('nicknames', () => {
+  it('refuses offensive and official-looking names', async () => {
+    for (const nickname of ['fuckface', 'Admin', 'cuberush_team']) {
+      const res = await call<{ error: string }>('POST', '/api/players', undefined, { nickname });
+      expect(res.status, nickname).toBe(400);
+      expect(res.body.error).toBe('invalid_nickname');
+    }
+  });
+});
+
 describe('lesson progress', () => {
   it('merges finished lessons from every device', async () => {
     const token = await server.register('Learner');

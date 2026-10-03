@@ -1,7 +1,6 @@
 import {
   LOGIN_CODE_LENGTH,
-  NICKNAME_PATTERN,
-  NICKNAME_RULES,
+  nicknameProblem,
   normalizeLoginCode,
   THEMES,
   utcDateKey,
@@ -91,8 +90,9 @@ function NicknameForm() {
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     const name = nickname.trim();
-    if (!NICKNAME_PATTERN.test(name)) {
-      setError(`Nicknames are ${NICKNAME_RULES}.`);
+    const problem = nicknameProblem(name);
+    if (problem) {
+      setError(problem);
       return;
     }
     setBusy(true);
@@ -253,6 +253,16 @@ export function Home() {
             )}
           </div>
         </div>
+
+        <details className="settings">
+          <summary>Privacy</summary>
+          <p className="privacy">
+            CubeRush stores your nickname, your solve times and moves, and a scrambled (hashed) copy
+            of your login token and login code. No email, no tracking, no ads. Your nickname and
+            times are public on the leaderboards. Guests store nothing on the server; your settings
+            and lesson progress stay in this browser.
+          </p>
+        </details>
 
         <details className="settings">
           <summary>Settings</summary>

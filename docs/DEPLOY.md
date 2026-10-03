@@ -22,6 +22,31 @@ To put that online you need:
 | **Backups**                      | Copies of `cuberush.db` somewhere else, for the day something breaks.          |
 | **One copy** of the server       | SQLite is one file on one disk; two servers would each have their own data.    |
 
+## Does it cost money?
+
+Short answer: **yes, a little, probably a few dollars a month.** Hosting that keeps a disk and runs
+non-stop is rarely free any more. Prices change, so treat these as rough (checked October 2026)
+and confirm on each site before signing up:
+
+| Option                  | Roughly                                                                                         |
+| ----------------------- | ----------------------------------------------------------------------------------------------- |
+| **Your own PC**         | Free. Docker on your PC (section 4) is the free way to learn; nobody else can reach it, though. |
+| **Fly.io**              | No real free tier since late 2024; trial credit, then pay-as-you-go. A small always-on machine is about $2–4/month, a 1 GB volume about $0.15/month. A card is needed. |
+| **Hetzner (VPS)**       | Around €6/month for a small server, and sometimes sold out in some regions.                     |
+| **Oracle Cloud "Always Free"** | $0, but the free allowance has shrunk, capacity is hard to get, and the sign-up is picky. A card is needed for identity checks. |
+| **A domain name**       | Optional, about $10–15/year. A free address like `yourapp.fly.dev` comes with Fly.             |
+
+Things that **don't** work for CubeRush even though they're free: Vercel and Netlify (serverless:
+no disk that survives, see below), and free plans that sleep the app or wipe the disk. A wiped disk
+means every player lost.
+
+**Why not Vercel?** It runs code as short-lived functions on a throw-away disk, so a SQLite file
+would be lost, and several copies could run at once. CubeRush needs one long-running server with a
+real disk.
+
+**My suggestion:** learn on your own PC (free), then when you're ready put it on Fly.io and watch
+the first month's bill in their dashboard. Set a spending alert if the site offers one.
+
 ## 2. Words you'll meet
 
 - **Host / server:** a computer in a data center you rent. Two kinds:

@@ -5,8 +5,7 @@ import {
   LOGIN_CODE_ALPHABET,
   LOGIN_CODE_LENGTH,
   MAX_SOLVE_MOVES,
-  NICKNAME_PATTERN,
-  NICKNAME_RULES,
+  nicknameProblem,
   normalizeLoginCode,
   SHOP,
   THEMES,
@@ -175,9 +174,8 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
         },
         async (request, reply) => {
           const nickname = request.body.nickname.trim();
-          if (!NICKNAME_PATTERN.test(nickname)) {
-            return fail(reply, 400, 'invalid_nickname', `Nicknames are ${NICKNAME_RULES}.`);
-          }
+          const problem = nicknameProblem(nickname);
+          if (problem) return fail(reply, 400, 'invalid_nickname', problem);
           const player: PlayerDto = { id: randomUUID(), nickname };
           const token = randomBytes(32).toString('base64url');
           try {

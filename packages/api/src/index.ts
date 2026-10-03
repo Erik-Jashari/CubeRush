@@ -1,8 +1,6 @@
 import type { ModeId, PointsBreakdown } from '@cuberush/cube-core';
 
-/** 3–20 letters, digits, `_` or `-`. Uniqueness is case-insensitive. */
-export const NICKNAME_PATTERN = /^[A-Za-z0-9_-]{3,20}$/;
-export const NICKNAME_RULES = '3–20 characters: letters, numbers, _ or -';
+export * from './nickname.js';
 
 /** Longest move list a solve may submit. */
 export const MAX_SOLVE_MOVES = 1000;
